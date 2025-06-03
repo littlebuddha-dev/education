@@ -8,9 +8,10 @@ const exemptPaths = [
   '/api/users/login',
   '/api/users/register',
   '/favicon.ico',
-  '/setup', // ✅ 追加: セットアップページ
-  '/api/setup', // ✅ 追加: セットアップAPI
-  '/api/tables' // ✅ 追加: テーブル存在チェック用API
+  '/setup',
+  '/api/setup',
+  '/api/tables',
+  '/api/users/check-admin' // ✅ 追加: 管理者存在チェックAPI
 ];
 
 export function middleware(request) {
@@ -55,7 +56,8 @@ export const config = {
     '/api/children/:path*',
     '/api/admin/:path*',
     '/api/skills/:path*',
-    '/api/setup', // Explicitly add /api/setup
-    '/api/tables' // Explicitly add /api/tables
+    '/api/setup',
+    '/api/tables',
+    '/api/users/check-admin' // ✅ 追加: 管理者存在チェックAPI
   ]
 };
