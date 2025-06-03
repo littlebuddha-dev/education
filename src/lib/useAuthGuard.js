@@ -18,11 +18,11 @@ export function useAuthGuard() {
     }
   }, [router]);
 
-  return ready;
-}
+  // ✅ Cookie からトークンを取得する関数 (ChatUI からコピー)
+  function getCookie(name) {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? match[2] : null;
+  }
 
-// ✅ Cookie からトークンを取得する関数
-function getCookie(name) {
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-  return match ? match[2] : null;
+  return ready;
 }
