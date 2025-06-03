@@ -1,11 +1,12 @@
+// src/app/api/users/[id]/skills/route.js
 import { query } from '@/lib/db';
-import { verifyTokenFromHeader } from '@/lib/auth';
+import { verifyTokenFromCookie } from '@/lib/auth';
 
 export async function GET(req, { params }) {
   const userId = params.id;
 
   try {
-    const user = verifyTokenFromHeader(req);
+    const user = verifyTokenFromCookie(req);
 
     // ✅ 自分自身 or 管理者のみアクセス許可
     if (user.id !== userId && user.role !== 'admin') {
