@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 教育AIシステム
 
-## Getting Started
+このプロジェクトは、AIチャット機能を中心に、子どものアカデミックな能力向上を支援し、教育スケジュールに基づいて学習をナビゲートする教育AIシステムです。保護者は子どもとのチャットを通じて学習をサポートし、子どもの学習履歴やスキル評価を管理できます。管理者は、システム全体のユーザーと学習データを効率的に管理するための機能を利用できます。
 
-First, run the development server:
+## 構成技術
+
+- **フロントエンド:** Next.js (App Router), React
+- **バックエンド:** Next.js API Routes (Node.js)
+- **データベース:** PostgreSQL
+- **AI/LLM連携:** Ollama, OpenAI, Gemini, Claude (src/lib/llmRouter.js経由で選択可能)
+- **認証:** JWT (JSON Web Tokens) を使用したCookieベースの認証
+- **パスワードハッシュ:** bcrypt
+
+## 主要機能
+
+### 1. ユーザー・認証
+
+- **ユーザー登録:** 新規ユーザー（保護者/管理者）の登録が可能です。パスワードは bcrypt でハッシュ化され安全に保存されます。
+- **ログイン:** メールアドレスとパスワードでログインし、JWTベースのセッション管理が行われます。
+- **認証ガード:** 未ログインユーザーは保護されたページにアクセスできません。
+
+### 2. 子ども管理
+
+- **子ども登録:** 保護者ユーザーは自分の子どもをシステムに登録できます。
+- **子ども詳細/学習履歴:** 各子どもの誕生日、性別、およびスキルログを確認できます。/page.js]
+- **AI評価ログ:** AIによる会話内容からのスキル評価履歴を閲覧できます。/evaluation/page.js]
+- **学習進捗:** 設定された学習目標に対する子どもの進捗状況を確認できます。/learning-progress/route.js]
+
+### 3. AIチャット教育
+
+- **先生とのチャット:** 子ども（または保護者）はAI先生と対話できます。
+- **会話ログ保存:** チャットの会話内容はデータベースに記録されます。
+- **自動スキル評価:** AIとの会話内容に基づいて、子どものスキルが自動的に評価され、`evaluation_logs` テーブルに記録されます。評価結果は「教科」「分野」「難易度」「理由」「学習方針」を含みます。
+- **スキルスコア更新:** AI評価に基づき、ユーザーの総合スキルスコアが更新されます。
+- **学習進捗自動更新:** AI評価の結果、該当する学習目標の進捗が「達成済み」に更新される場合があります。
+
+### 4. スキルログ記録
+
+- **手動スキルログ:** 保護者は子どものスキルログを手動で追加できます（分野、スコア）。
+
+### 5. 管理者機能
+
+- **全ユーザー管理:** 管理者はシステムに登録されている全ユーザーの一覧を閲覧し、削除することができます。各ユーザーの子ども数や子ども名も表示されます。
+- **ユーザー別スキル統計:** 管理者は特定の保護者ユーザーの子どものスキルログ統計（分野別平均スコア、記録件数、最終記録日）を閲覧できます。/skills/route.js]
+
+## 開発環境のセットアップ
+
+### 前提条件
+
+- Node.js v23.11.0 以降 (推奨)
+- npm 11.3.0 以降 (推奨)
+- PostgreSQL データベース
+- Homebrew (macOSユーザーの場合)
+
+### 1. リポジトリのクローン
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+git clone <あなたのリポジトリURL>
+cd education-main
