@@ -1,18 +1,48 @@
 // littlebuddha-dev/education/education-0c8aa7b4e15b5720ef44b74b6bbc36cb09462a21/src/app/page.js
-'use client'; // ✅ クライアントコンポーネント化
+'use client'; // これを忘れずに！
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { jwtDecode } from 'jwt-decode'; // jwt-decode を直接インポート
 
 export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState(false);
   const router = useRouter();
 
+  // Cookieからトークンを取得するヘルパー関数
+  const getCookie = (name) => {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? match[2] : null;
+  };
+
   useEffect(() => {
-    async function checkSetup() {
+    async function checkSetupAndAuth() {
+      const token = getCookie('token');
+
+      if (token) {
+        // トークンがあれば、ログイン済みと判断して適切なページへリダイレクト
+        try {
+          const decoded = jwtDecode(token);
+          console.log('User logged in:', decoded);
+
+          if (decoded.role === 'child') {
+            router.replace('/chat');
+          } else if (decoded.role === 'parent') {
+            router.replace('/children');
+          } else if (decoded.role === 'admin') {
+            router.replace('/admin/users');
+          }
+          return; // リダイレクトしたら処理を終了
+        } catch (decodeError) {
+          console.error('Token decode error in HomePage:', decodeError);
+          // トークンが無効なら、ログイン状態ではないので次へ進む
+          document.cookie = 'token=; Max-Age=0; path=/;'; // 無効なトークンは削除
+        }
+      }
+
+      // トークンがない、または無効な場合、セットアップ状況をチェック
       try {
-        // 1. users テーブルが存在するかチェック
         const tableCheckRes = await fetch('/api/tables');
         const tablesData = await tableCheckRes.json();
         const usersTableExists = tablesData.some(table => table.table_name === 'users');
@@ -24,57 +54,28 @@ export default function HomePage() {
           return;
         }
 
-        // 2. 管理者ユーザーが存在するかチェック
-        // Note: このAPIは認証が必要ですが、ここでは存在チェックのみのため、
-        // 実際には `/api/users` にて管理者ユーザーが存在するかどうかの簡易チェックを実装する必要があります。
-        // （現行の /api/admin/users は認証済みのadminロールが必要なので、そのままだと使えない）
-        // 一時的な回避策として、/api/users (全ユーザー取得API) にてadminユーザーが1人でもいればOKとする。
-        // あるいは、認証なしで管理者ユーザーの存在をチェックする新しいAPIを作成する。
-        // ここでは、簡易的に /api/users を叩いてエラーでなければテーブルは存在し、
-        // もしユーザーがいなければ /setup にリダイレクト、というロジックにする。
-        const usersRes = await fetch('/api/users', {
-          headers: {
-            // ダミーのAuthorizationヘッダー。middlewareで認証ガードされるが、
-            // その結果としてログインページにリダイレクトされるため、
-            // 実際にはこのfetchは実行されず、middlewareの認証ガードが優先される。
-            // したがって、このロジックは主にログイン状態でない初回アクセス時に有効となる。
-            // より正確な実装は、認証不要な管理者存在チェックAPIが必要。
-            // 現状では、テーブルが存在すれば/loginへリダイレクトされ、そこからログイン後にadmin/usersで確認となる。
-            // ここでは、テーブルが存在しないケースに絞って /setup にリダイレクトするロジックとする。
-            // もし、テーブルは存在するが管理者ユーザーがいない、というケースも自動化したい場合は、
-            // /api/users/check-admin-exists のような認証不要なAPIが必要になります。
-          }
-        });
-        const users = await usersRes.json();
+        // 管理者ユーザーの存在チェック (認証なしで呼び出せるAPIがあれば良いが、なければ簡易的なチェック)
+        // ここでは /api/tables が成功していればDB接続はできていると仮定し、
+        // もしadminユーザーが本当にいない場合、ユーザーは手動で /setup に行くか、登録を促される
+        // または、/api/users を認証なしで叩いてユーザーがいなければ /setup にリダイレクトするなど、より複雑なロジックが必要
+        // 現状の /api/users は認証が必要なため、ここでは直接adminユーザーの存在をチェックするAPI呼び出しは避け、
+        // usersTableExists が true であれば login に進む、というシンプルな流れを維持する。
+        // setupページは、あくまでDBテーブルがないか、adminユーザーがいない場合に「のみ」リダイレクトされるべき。
+        // ログイン済みであれば、上記トークンチェックでリダイレクトされるため、ここには到達しない。
 
-        // テーブルは存在するが、adminユーザーが一人もいない場合もsetupに飛ばす
-        if (usersTableExists && usersRes.ok && !users.some(user => user.role === 'admin')) {
-          console.log('Admin user not found. Redirecting to setup.');
-          router.replace('/setup');
-          return;
-        }
-
-        // 全てクリアしていれば、そのままトップページを表示
+        // 上記リダイレクトが行われなかった場合、ローディング終了
         setLoading(false);
 
       } catch (err) {
         console.error('Setup check error:', err);
         setDbError(true);
         setLoading(false);
-        // DB接続エラーの場合もセットアップページへ誘導することが可能だが、
-        // 今回はテーブル存在チェックAPIがDB接続エラーで失敗した場合を考慮。
-        // 基本的には、DB接続エラーであれば手動でDBを起動する必要がある。
-        // ここではDB接続エラーの場合もセットアップページに遷移させることで、
-        // ユーザーに環境変数の確認を促すようにする。
         console.log('Database or admin check failed, redirecting to setup as fallback.');
-        router.replace('/setup');
+        router.replace('/setup'); // DB接続自体ができない場合もセットアップに誘導
       }
     }
 
-    // `page.js` はサーバーコンポーネントとしても動作するため、`useEffect` 内に記述してクライアントサイドでのみ実行されるようにする。
-    // また、API経由でテーブルリストを取得するのは、DB接続情報がサーバ側にあるため、直接アクセスする形にする。
-    // `/api/tables` のGETリクエストは認証不要にしているので、middlewareで許可される。
-    checkSetup();
+    checkSetupAndAuth();
   }, [router]);
 
   if (loading) {
@@ -95,7 +96,7 @@ export default function HomePage() {
     );
   }
 
-  // テーブルが存在し、管理者ユーザーもいる場合、通常のトップページコンテンツを表示
+  // トークンがなければ、ログインを促すコンテンツを表示
   return (
     <main style={{ padding: "2rem" }}>
       <h1>教育AIシステムへようこそ！</h1>
