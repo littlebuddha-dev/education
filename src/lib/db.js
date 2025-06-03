@@ -47,4 +47,22 @@ export async function getClient() {
   }
 }
 
-// ... (rest of the code)
+// ✅ 追加: クライアントを解放
+export function releaseClient(client) {
+  client.release();
+}
+
+// ✅ 追加: トランザクション開始
+export async function beginTransaction(client) {
+  await client.query('BEGIN');
+}
+
+// ✅ 追加: トランザクションコミット
+export async function commitTransaction(client) {
+  await client.query('COMMIT');
+}
+
+// ✅ 追加: トランザクションロールバック
+export async function rollbackTransaction(client) {
+  await client.query('ROLLBACK');
+}
