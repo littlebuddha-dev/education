@@ -5,17 +5,13 @@ import { fetchLLM } from '@/lib/llmRouter';
 
 export async function POST(req) {
   try {
-    const user = verifyTokenFromCookie(req); // ✅ Cookieからの検証に変更
-    // ✅ childId を受け取る
+    const user = verifyTokenFromCookie(req);
     const { provider, message, systemPrompt, childId } = await req.json();
 
-    // ✅ childId が提供されていない場合はエラーを返す
     if (!childId) {
       return Response.json({ error: 'チャット対象の子どもが指定されていません。' }, { status: 400 });
     }
 
-    // ✅ childId が認証済みユーザーに紐づくか確認（セキュリティ強化）
-    // 保護者ロールであれば、childrenテーブルでuser_idとchildIdが一致するか確認
     if (user.role === 'parent') {
       const childCheck = await query(
         `SELECT id FROM children WHERE id = $1 AND user_id = $2`,
@@ -25,7 +21,6 @@ export async function POST(req) {
         return Response.json({ error: '指定された子どもは、この保護者の子どもではありません。' }, { status: 403 });
       }
     }
-    // 管理者ロールの場合は、任意のchildIdを許可するが、今回は保護者限定とするため上記チェックで十分。
 
     // ① AI応答
     const aiResponse = await fetchLLM(provider, message, systemPrompt || 'あなたは子どもに優しく丁寧に教える先生です。');
@@ -40,7 +35,6 @@ export async function POST(req) {
     const conversationId = result.rows[0].id;
 
     // ③ スキル評価プロンプトで fetchLLM
-    // ここでLLMへのプロンプトを「接続詞の使い方が弱い」「語彙力が少ない」などの詳細な分析を促すように変更可能
     const evalPrompt = `
 あなたは教育評価AIです。以下のチャットの質問内容と回答を評価し、必ず次の形式の JSON オブジェクトのみを返してください。
 評価には、学習項目（subject）、具体的な分野（domain）、難易度（level）、その評価に至った理由（reason）、そして今後の学習方針（recommendation）を含めてください。
@@ -59,11 +53,11 @@ JSON形式のみ出力してください。説明文は不要です。
       // ④ 評価ログ保存
       await query(`
         INSERT INTO evaluation_logs
-        (user_id, child_id, conversation_id, subject, domain, level, reason, recommendation) -- ✅ child_id を追加
+        (user_id, child_id, conversation_id, subject, domain, level, reason, recommendation)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `, [
         user.id,
-        childId, // ✅ childId を渡す
+        childId,
         conversationId,
         parsed.subject,
         parsed.domain,
@@ -73,14 +67,12 @@ JSON形式のみ出力してください。説明文は不要です。
       ]);
 
       // ⑤ スキルスコア更新
-      // ここはAIによる評価に応じてスコアを変動させるロジックに拡張可能
-      // 例: levelが"初級"なら+1、"中級"なら+2、"上級"なら+3など
       await query(`
         INSERT INTO skill_scores (user_id, subject, domain, level, score)
-        VALUES ($1, $2, $3, $4, 1) -- 現状は常に1を足すが、AI評価のlevelに応じて変更する
+        VALUES ($1, $2, $3, $4, 1)
         ON CONFLICT (user_id, subject, domain)
         DO UPDATE SET
-          score = skill_scores.score + 1, -- ここをAI評価のlevelに応じた加算値に変更する
+          score = skill_scores.score + 1,
           level = EXCLUDED.level,
           updated_at = CURRENT_TIMESTAMP
       `, [
@@ -90,9 +82,31 @@ JSON形式のみ出力してください。説明文は不要です。
         parsed.level
       ]);
 
+      // ✅ 追加: 学習進捗の更新ロジック
+      // 評価結果に基づいて、子どもの学習目標の進捗を更新
+      // ここでは簡易的に、評価された subject と domain に合致する学習目標を「達成済み」にするロジックを例示します
+      // より複雑な達成条件（例: スコアが一定値以上、特定の問題をクリアなど）は別途実装が必要です
+      const updatedGoals = await query(`
+        UPDATE child_learning_progress
+        SET status = '達成済み', achieved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        WHERE child_id = $1
+          AND goal_id IN (
+            SELECT id FROM learning_goals
+            WHERE subject = $2 AND domain = $3
+          )
+        AND status != '達成済み' -- すでに達成済みのものは更新しない
+        RETURNING *;
+      `, [childId, parsed.subject, parsed.domain]);
+
+      if (updatedGoals.rows.length > 0) {
+        console.log(`Child ${childId} achieved learning goals:`, updatedGoals.rows.map(g => g.goal_id));
+        // ここで、達成した目標を子どもに通知するAI応答を生成するロジックを追加することも可能
+        // 例: `aiResponse += "\nおめでとう！「" + parsed.subject + "の" + parsed.domain + "」の学習目標を達成しました！";`
+      }
+
     } catch (err) {
       console.error('スキル評価パースエラーまたは保存エラー:', err.message);
-      console.error('LLM生応答:', evalResponse); // ✅ エラー時に生のLLM応答をログ出力
+      console.error('LLM生応答:', evalResponse);
       // エラーが発生しても、メインのチャット応答は返す
     }
 
