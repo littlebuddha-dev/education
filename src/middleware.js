@@ -45,6 +45,7 @@ export const config = {
      * - any_other_path (e.g. public folder files)
      */
     '/((?!_next/static|_next/image|favicon.ico).*)', // すべてのパスに適用
+    // 以下は明示的に追加するパスの例、上の行でほぼ全てカバーされるが、念のため
     '/chat/:path*',
     '/users/:path*',
     '/children/:path*',
