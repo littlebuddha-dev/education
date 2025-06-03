@@ -1,9 +1,10 @@
-// littlebuddha-dev/education/education-main/src/app/children/[id]/page.js
+// src/app/children/[id]/page.js
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import SkillLogForm from '@/components/SkillLogForm';
+import { jwtDecode } from 'jwt-decode'; // ✅ 追加
 
 export default function ChildDetailPage() {
   const params = useParams();
@@ -11,17 +12,21 @@ export default function ChildDetailPage() {
 
   const [child, setChild] = useState(null);
   const [skillLogs, setSkillLogs] = useState([]);
-  const [learningProgress, setLearningProgress] = useState([]); // ✅ 追加: 学習進捗
+  const [learningProgress, setLearningProgress] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) {
       setError('ログインしていません。');
       return;
     }
 
+    const decoded = jwtDecode(token);
+
     // 子ども情報を取得
+    // ここでは /api/children を利用し、idでフィルタリングしています。
     fetch(`/api/children?id=${childId}`, {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -37,7 +42,15 @@ export default function ChildDetailPage() {
     .then(data => {
         const foundChild = data.find(c => c.id === childId);
         if (foundChild) {
-            setChild(foundChild);
+            // 権限チェック:
+            // 1. ログインユーザーが管理者
+            // 2. ログインユーザーがこの子どもの保護者 (user_id が一致)
+            // 3. ログインユーザーがこの子ども自身 (child_user_id が一致)
+            if (decoded.role === 'admin' || foundChild.user_id === decoded.id || foundChild.child_user_id === decoded.id) {
+                setChild(foundChild);
+            } else {
+                setError('この子どもの情報を閲覧する権限がありません。');
+            }
         } else {
             setError('子どもが見つかりませんでした。');
         }
@@ -48,11 +61,12 @@ export default function ChildDetailPage() {
     });
 
     fetchSkills();
-    fetchLearningProgress(); // ✅ 追加: 学習進捗の取得
+    fetchLearningProgress();
   }, [childId]);
 
   const fetchSkills = () => {
-    const token = localStorage.getItem('token');
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) return;
 
     fetch(`/api/children/${childId}/skills`, {
@@ -74,12 +88,12 @@ export default function ChildDetailPage() {
       });
   };
 
-  // ✅ 追加: 学習進捗を取得する関数
   const fetchLearningProgress = () => {
-    const token = localStorage.getItem('token');
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) return;
 
-    fetch(`/api/children/${childId}/learning-progress`, { // 新しいAPIエンドポイントを想定
+    fetch(`/api/children/${childId}/learning-progress`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -98,6 +112,11 @@ export default function ChildDetailPage() {
       });
   };
 
+  // ✅ Cookie から値を取り出す関数 (ChatUI からコピー)
+  function getCookie(name) {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? match[2] : null;
+  }
 
   if (error) return <main style={{ padding: '2rem' }}><p style={{ color: 'red' }}>{error}</p></main>;
   if (!child) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>;
@@ -108,6 +127,7 @@ export default function ChildDetailPage() {
       <p>誕生日: {child.birthday}</p>
       <p>性別: {child.gender}</p>
 
+      {/* ... (スキルログと学習進捗の表示は変更なし) */}
       <h2 style={{ marginTop: '2rem' }}>スキルログ</h2>
       {skillLogs.length === 0 ? (
         <p>スキルログがまだ登録されていません。</p>
@@ -132,7 +152,6 @@ export default function ChildDetailPage() {
         </table>
       )}
 
-      {/* ✅ 追加: 学習進捗の表示セクション */}
       <h2 style={{ marginTop: '2rem' }}>学習進捗</h2>
       {learningProgress.length === 0 ? (
         <p>学習目標がまだ設定されていないか、進捗データがありません。</p>
@@ -161,8 +180,11 @@ export default function ChildDetailPage() {
         </table>
       )}
 
-
-      <SkillLogForm childId={childId} onSuccess={fetchSkills} />
+      {/* スキルログフォームは、ログインしているユーザーが親か、
+          または自身がチャットしている子どもの場合のみ表示 */}
+      {child && (decoded.role === 'parent' || (decoded.role === 'child' && child.child_user_id === decoded.id)) && (
+        <SkillLogForm childId={childId} onSuccess={fetchSkills} />
+      )}
     </main>
   );
 }
