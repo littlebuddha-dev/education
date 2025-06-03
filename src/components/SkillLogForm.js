@@ -1,3 +1,4 @@
+// src/components/SkillLogForm.js
 'use client';
 
 import { useState } from 'react';
@@ -9,7 +10,13 @@ export default function SkillLogForm({ childId, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const token = localStorage.getItem('token');
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
+
+    if (!token) {
+      setError('ログイン情報がありません。');
+      return;
+    }
 
     try {
       const res = await fetch('/api/skills', {
@@ -31,6 +38,12 @@ export default function SkillLogForm({ childId, onSuccess }) {
       setError(err.message);
     }
   };
+
+  // ✅ Cookie から値を取り出す関数 (ChatUI からコピー)
+  function getCookie(name) {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? match[2] : null;
+  }
 
   return (
     <form onSubmit={handleSubmit} style={{ marginTop: '2rem' }}>
