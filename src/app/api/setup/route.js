@@ -29,6 +29,7 @@ export async function POST(req) {
     await beginTransaction(client);
 
     // 1. users テーブルが存在するか確認
+    // ここでテーブルの存在を確認するのは、schema.sqlの適用が必要かどうかの判断のため
     const tableCheck = await client.query(`
       SELECT EXISTS (
         SELECT 1
@@ -64,7 +65,9 @@ export async function POST(req) {
       );
       console.log('Admin user created successfully.');
     } else {
-      console.log('Admin user already exists. Skipping admin user creation.');
+      // 管理者ユーザーが既に存在する場合は、エラーとして扱う（再作成を防ぐため）
+      await rollbackTransaction(client); // ここでロールバック
+      return Response.json({ error: '管理者ユーザーは既に存在します。' }, { status: 409 });
     }
 
     await commitTransaction(client);
@@ -75,6 +78,10 @@ export async function POST(req) {
       await rollbackTransaction(client);
     }
     console.error('セットアップエラー:', err);
+    // データベース接続エラーをより具体的に表示
+    if (err.message.includes('connect')) {
+      return Response.json({ error: 'データベースに接続できません。PostgreSQLが起動しているか、.env.localの設定を確認してください。' }, { status: 500 });
+    }
     return Response.json({ error: err.message || 'セットアップに失敗しました。' }, { status: 500 });
   } finally {
     if (client) {
