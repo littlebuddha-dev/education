@@ -8,18 +8,19 @@ import { useRouter } from 'next/navigation';
 export default function AdminUsersPage() {
   const [users, setUsers] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
-  const [tokenInfo, setTokenInfo] = useState(null); // ✅ 正しい位置
+  const [tokenInfo, setTokenInfo] = useState(null);
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) {
       router.push('/login');
       return;
     }
 
     const decoded = jwtDecode(token);
-    setTokenInfo(decoded); // ✅ 保存しておく
+    setTokenInfo(decoded);
 
     if (decoded.role !== 'admin') {
       setErrorMessage('⚠️ このページは管理者のみアクセス可能です');
@@ -43,11 +44,11 @@ export default function AdminUsersPage() {
       });
   }, []);
 
-  // ✅ 削除処理（中に置く）
   const handleDelete = async (id) => {
     if (!confirm('このユーザーを本当に削除しますか？')) return;
 
-    const token = localStorage.getItem('token');
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
         method: 'DELETE',
@@ -67,6 +68,12 @@ export default function AdminUsersPage() {
     }
   };
 
+  // ✅ Cookie から値を取り出す関数 (ChatUI からコピー)
+  function getCookie(name) {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? match[2] : null;
+  }
+
   return (
     <main style={{ padding: '2rem' }}>
       <h1>ユーザー管理（管理者専用）</h1>
@@ -83,7 +90,7 @@ export default function AdminUsersPage() {
               <th>子ども</th>
               <th>作成日</th>
               <th>ID</th>
-              <th>操作</th> {/* '統計を見る' と '操作' の列を統合し、'操作' のみにまとめる */}
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
@@ -91,26 +98,34 @@ export default function AdminUsersPage() {
               <tr key={user.id}>
                 <td>{user.last_name} {user.first_name}</td>
                 <td>{user.email}</td>
-                <td>{user.role}</td>
+                <td>{user.role === 'child' ? '子ども' : user.role === 'parent' ? '保護者' : '管理者'}</td> {/* ✅ ロール表示を調整 */}
                 <td>
                   <div>{user.children_count}人</div>
                   <div style={{ fontSize: '0.9em', color: '#555' }}>
                     {user.children?.length > 0 &&
                       user.children.map(child => (
                         <div key={child.id}>
+                          {/* children.id で直接詳細ページへリンク */}
                           <a href={`/children/${child.id}`} style={{ color: '#0070f3', textDecoration: 'underline' }}>
                             {child.name}
                           </a>
                         </div>
                       ))
                     }
+                    {/* 子どもが自分自身のアカウントの場合 */}
+                    {user.role === 'child' && user.children_count === 0 && user.id === user.children?.[0]?.id && (
+                        <div>
+                            <a href={`/children/${user.children[0].id}`} style={{ color: '#0070f3', textDecoration: 'underline' }}>
+                                (自身)
+                            </a>
+                        </div>
+                    )}
                   </div>
                 </td>
                 <td>{new Date(user.created_at).toLocaleDateString()}</td>
 
                 <td style={{ fontSize: '0.8em', color: '#888' }}>{user.id}</td>
-                
-                {/* 冗長な削除ボタンを削除し、操作列に統合 */}
+
                 <td>
                   <button
                     onClick={() => handleDelete(user.id)}
@@ -120,13 +135,15 @@ export default function AdminUsersPage() {
                     削除
                   </button>
 
-                  {/* ✅ スキル統計リンク追加 */}
-                  <a
-                    href={`/admin/users/${user.id}/skills`}
-                    style={{ backgroundColor: '#444', color: 'white', padding: '0.3rem 0.5rem', textDecoration: 'none' }}
-                  >
-                    統計を見る
-                  </a>
+                  {/* ✅ ロールが 'parent' または 'child' の場合のみスキル統計リンク */}
+                  {(user.role === 'parent' || user.role === 'child') && (
+                    <a
+                      href={`/admin/users/${user.id}/skills`}
+                      style={{ backgroundColor: '#444', color: 'white', padding: '0.3rem 0.5rem', textDecoration: 'none' }}
+                    >
+                      統計を見る
+                    </a>
+                  )}
                 </td>
               </tr>
             ))}
