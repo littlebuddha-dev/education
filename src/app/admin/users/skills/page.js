@@ -1,3 +1,4 @@
+// src/app/admin/users/skills/page.js
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -12,7 +13,8 @@ export default function UserSkillsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) {
       router.push('/login');
       return;
@@ -42,6 +44,12 @@ export default function UserSkillsPage() {
     acc[row.child_name].push(row);
     return acc;
   }, {});
+
+  // ✅ Cookie から値を取り出す関数 (ChatUI からコピー)
+  function getCookie(name) {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? match[2] : null;
+  }
 
   return (
     <main style={{ padding: '2rem' }}>
