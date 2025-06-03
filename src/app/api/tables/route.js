@@ -14,6 +14,18 @@ export async function GET() {
   } catch (err) {
     console.error('Error fetching table list or connecting to DB:', err);
     // 接続失敗やエラーの場合は、success: false とエラーメッセージを返す
-    return Response.json({ success: false, error: 'DB接続に失敗しました。PostgreSQLが起動しているか、.env.localの設定を確認してください。' }, { status: 500 });
+    // データベース接続のエラーの種類を判別して、より具体的なメッセージを返す
+    let errorMessage = 'DB接続に失敗しました。PostgreSQLが起動しているか、.env.localの設定を確認してください。';
+    if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') {
+      errorMessage = 'データベースホストが見つからないか、接続が拒否されました。ホスト名、ポート、またはデータベースが起動しているか確認してください。';
+    } else if (err.code === '28P01') { // PostgreSQL authentication_failed
+      errorMessage = 'データベース認証に失敗しました。ユーザー名とパスワードが正しいか確認してください。';
+    } else if (err.code === '3D000') { // PostgreSQL invalid_catalog_name
+      errorMessage = '指定されたデータベースが存在しません。データベース名が正しいか確認してください。';
+    } else {
+      errorMessage = `データベースエラー: ${err.message}`;
+    }
+
+    return Response.json({ success: false, error: errorMessage }, { status: 500 });
   }
 }
