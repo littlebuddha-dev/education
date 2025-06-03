@@ -1,9 +1,11 @@
+// littlebuddha-dev/education/education-main/src/components/ChatUI.js
 'use client';
 
 import { useEffect, useState } from 'react';
 import { jwtDecode } from 'jwt-decode';
 
-export default function ChatUI() {
+// ✅ props に childId を追加
+export default function ChatUI({ childId }) {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState([]);
   const [systemPrompt] = useState('あなたは子どもに優しく丁寧に教える先生です。');
@@ -25,6 +27,12 @@ export default function ChatUI() {
       alert('ログイン情報がありません。ログインしてください。');
       return;
     }
+    
+    // ✅ childId が選択されていない場合は警告
+    if (!childId) {
+      alert('チャットする子どもを選択してください。');
+      return;
+    }
 
     const userMessage = { role: 'user', content: input };
     setMessages(prev => [...prev, userMessage]);
@@ -35,7 +43,7 @@ export default function ChatUI() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include', // ✅ Cookie を送信
-        body: JSON.stringify({ message: input, systemPrompt, provider })
+        body: JSON.stringify({ message: input, systemPrompt, provider, childId }) // ✅ childId を追加
       });
 
       const data = await res.json();
@@ -54,7 +62,7 @@ export default function ChatUI() {
       ]);
     }
   };
-
+  
   return (
     <div>
       <div style={{ padding: '1rem', border: '1px solid #ccc', height: '400px', overflowY: 'auto' }}>
