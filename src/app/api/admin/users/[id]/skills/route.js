@@ -1,10 +1,10 @@
 // littlebuddha-dev/education/education-main/src/app/api/admin/users/[id]/skills/route.js
 import { query } from '@/lib/db';
-import { verifyTokenFromHeader } from '@/lib/auth';
+import { verifyTokenFromCookie } from '@/lib/auth'; // 修正: verifyTokenFromHeader を verifyTokenFromCookie に変更
 
 export async function GET(req, { params }) {
   try {
-    const user = verifyTokenFromHeader(req);
+    const user = verifyTokenFromCookie(req); // 修正: verifyTokenFromHeader を verifyTokenFromCookie に変更
     if (user.role !== 'admin') {
       return Response.json({ error: '管理者のみがアクセスできます' }, { status: 403 });
     }
