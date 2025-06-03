@@ -95,10 +95,9 @@ export default function AdminUsersPage() {
           </thead>
           <tbody>
             {users.map(user => (
-              <tr key={user.id}>
-                <td>{user.last_name} {user.first_name}</td>
+              <tr key={user.id}><td>{user.last_name} {user.first_name}</td> {/* 修正後 */}
                 <td>{user.email}</td>
-                <td>{user.role === 'child' ? '子ども' : user.role === 'parent' ? '保護者' : '管理者'}</td> {/* ✅ ロール表示を調整 */}
+                <td>{user.role === 'child' ? '子ども' : user.role === 'parent' ? '保護者' : '管理者'}</td>
                 <td>
                   <div>{user.children_count}人</div>
                   <div style={{ fontSize: '0.9em', color: '#555' }}>
@@ -135,7 +134,7 @@ export default function AdminUsersPage() {
                     削除
                   </button>
 
-                  {/* ✅ ロールが 'parent' または 'child' の場合のみスキル統計リンク */}
+                  {/* ロールが 'parent' または 'child' の場合のみスキル統計リンク */}
                   {(user.role === 'parent' || user.role === 'child') && (
                     <a
                       href={`/admin/users/${user.id}/skills`}
@@ -148,7 +147,7 @@ export default function AdminUsersPage() {
               </tr>
             ))}
           </tbody>
-
+          
         </table>
       )}
 
