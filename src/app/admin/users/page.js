@@ -1,3 +1,4 @@
+// src/app/admin/users/page.js
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -82,8 +83,7 @@ export default function AdminUsersPage() {
               <th>子ども</th>
               <th>作成日</th>
               <th>ID</th>
-              <th>統計を見る</th>
-              <th>操作</th>
+              <th>操作</th> {/* '統計を見る' と '操作' の列を統合し、'操作' のみにまとめる */}
             </tr>
           </thead>
           <tbody>
@@ -109,6 +109,8 @@ export default function AdminUsersPage() {
                 <td>{new Date(user.created_at).toLocaleDateString()}</td>
 
                 <td style={{ fontSize: '0.8em', color: '#888' }}>{user.id}</td>
+                
+                {/* 冗長な削除ボタンを削除し、操作列に統合 */}
                 <td>
                   <button
                     onClick={() => handleDelete(user.id)}
@@ -125,16 +127,6 @@ export default function AdminUsersPage() {
                   >
                     統計を見る
                   </a>
-                </td>
-
-                <td>
-                  <button
-                    onClick={() => handleDelete(user.id)}
-                    disabled={user.id === tokenInfo?.id}
-                    style={{ backgroundColor: 'red', color: 'white', padding: '0.3rem 0.5rem' }}
-                  >
-                    削除
-                  </button>
                 </td>
               </tr>
             ))}
