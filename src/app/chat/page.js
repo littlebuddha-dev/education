@@ -3,18 +3,18 @@
 
 import { useAuthGuard } from '@/lib/useAuthGuard';
 import ChatUI from '@/components/ChatUI';
-import { useEffect, useState } from 'react'; // ✅ 追加
-import { jwtDecode } from 'jwt-decode'; // ✅ 追加
+import { useEffect, useState } from 'react';
+import { jwtDecode } from 'jwt-decode';
 
 export default function ChatPage() {
   const ready = useAuthGuard();
-  const [childId, setChildId] = useState(null); // ✅ 追加
-  const [children, setChildren] = useState([]); // ✅ 追加
-  const [error, setError] = useState(''); // ✅ 追加
+  const [childId, setChildId] = useState(null);
+  const [children, setChildren] = useState([]);
+  const [error, setError] = useState('');
+  const [userRole, setUserRole] = useState(null); // ✅ 追加: ユーザーロール
 
-  // ✅ ログイン中の保護者の子ども一覧を取得
   useEffect(() => {
-    if (!ready) return; // AuthGuardが完了してから実行
+    if (!ready) return;
 
     const token = localStorage.getItem('token');
     if (!token) {
@@ -24,8 +24,10 @@ export default function ChatPage() {
 
     try {
       const decoded = jwtDecode(token);
+      setUserRole(decoded.role); // ✅ ロールを保存
+
       if (decoded.role === 'parent') {
-        fetch('/api/children', { // 保護者の子ども一覧を取得するAPIを呼び出し
+        fetch('/api/children', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -36,9 +38,11 @@ export default function ChatPage() {
               setError(data.error);
               return;
             }
-            setChildren(data);
-            if (data.length > 0) {
-              setChildId(data[0].id); // デフォルトで最初の子どもを選択
+            // 保護者ユーザーの子どもリストは user_id に紐付くものを取得
+            const parentChildren = data.filter(c => c.user_id === decoded.id);
+            setChildren(parentChildren);
+            if (parentChildren.length > 0) {
+              setChildId(parentChildren[0].id);
             } else {
               setError('登録されている子どもがいません。子どもを登録してください。');
             }
@@ -47,24 +51,47 @@ export default function ChatPage() {
             console.error('子ども情報取得エラー:', err);
             setError('子ども情報の取得に失敗しました。');
           });
+      } else if (decoded.role === 'child') {
+        // 'child' ロールの場合、自身の children.id を取得
+        fetch(`/api/children?child_user_id=${decoded.id}`, { // 新しいAPIクエリパラメータを想定
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data.error) {
+              setError(data.error);
+              return;
+            }
+            if (data.length > 0) {
+              setChildId(data[0].id); // 自身の子どもプロフィールIDをセット
+            } else {
+              setError('子どもプロフィール情報が見つかりません。管理者にお問い合わせください。');
+            }
+          })
+          .catch(err => {
+            console.error('子どもプロフィール取得エラー:', err);
+            setError('子どもプロフィール情報の取得に失敗しました。');
+          });
       } else {
-        setError('チャット機能は保護者ユーザーのみが利用できます。');
+        setError('チャット機能は保護者または子どもユーザーのみが利用できます。');
       }
     } catch (err) {
       console.error('トークン解析エラー:', err);
       setError('認証情報が不正です。再ログインしてください。');
     }
-  }, [ready]); // ready が変更されたときに実行
+  }, [ready]);
 
   if (!ready) return null;
 
   return (
     <main style={{ padding: '2rem' }}>
       <h1>先生とのチャット</h1>
-      {error && <p style={{ color: 'red' }}>{error}</p>} {/* エラー表示 */}
+      {error && <p style={{ color: 'red' }}>{error}</p>}
 
-      {/* 子ども選択ドロップダウン（保護者かつ子どもがいる場合のみ表示） */}
-      {children.length > 0 && (
+      {/* 保護者の場合のみ子ども選択ドロップダウンを表示 */}
+      {userRole === 'parent' && children.length > 0 && ( // ✅ userRole のチェックを追加
         <div style={{ marginBottom: '1rem' }}>
           <label>
             チャットする子ども:
@@ -83,8 +110,10 @@ export default function ChatPage() {
         </div>
       )}
 
-      {childId && <ChatUI childId={childId} />} {/* ✅ childId を ChatUI に渡す */}
-      {!childId && children.length === 0 && !error && <p>チャットを開始するには、まず子どもを登録してください。</p>} {/* 子どもがいない場合のメッセージ */}
+      {childId && <ChatUI childId={childId} />}
+      {/* 保護者の場合で子どもがいないか、子どもの場合でプロフィールが見つからない場合 */}
+      {!childId && (userRole === 'parent' && children.length === 0) && !error && <p>チャットを開始するには、まず子どもを登録してください。</p>}
+      {!childId && userRole === 'child' && !error && <p>チャットを開始するための子どもプロフィール情報が見つかりません。</p>}
     </main>
   );
 }
