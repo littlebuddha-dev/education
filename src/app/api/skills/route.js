@@ -1,9 +1,10 @@
+// src/app/api/skills/route.js
 import { query } from '@/lib/db';
-import { verifyTokenFromHeader } from '@/lib/auth';
+import { verifyTokenFromCookie } from '@/lib/auth';
 
 export async function POST(req) {
   try {
-    const user = verifyTokenFromHeader(req);
+    const user = verifyTokenFromCookie(req);
     if (user.role !== 'parent') {
       return Response.json({ error: '保護者のみ操作可能です' }, { status: 403 });
     }
