@@ -1,0 +1,38 @@
+import { query } from '@/lib/db';
+import { verifyTokenFromHeader } from '@/lib/auth';
+
+export async function GET(req, { params }) {
+  try {
+    const user = verifyTokenFromHeader(req);
+    if (user.role !== 'admin') {
+      return Response.json({ error: '管理者のみがアクセスできます' }, { status: 403 });
+    }
+
+    const parentId = params.id;
+
+    // UUID検証（最低限）
+    if (!/^[0-9a-fA-F-]{36}$/.test(parentId)) {
+      return Response.json({ error: '不正なユーザーID' }, { status: 400 });
+    }
+
+    const result = await query(`
+      SELECT 
+        c.id AS child_id,
+        c.name AS child_name,
+        s.domain,
+        ROUND(AVG(s.score)::numeric, 1) AS avg_score,
+        COUNT(*) AS entry_count,
+        MAX(s.recorded_at) AS last_recorded
+      FROM children c
+      JOIN skill_logs s ON s.child_id = c.id
+      WHERE c.user_id = $1
+      GROUP BY c.id, c.name, s.domain
+      ORDER BY c.name, s.domain
+    `, [parentId]);
+
+    return Response.json(result.rows);
+  } catch (err) {
+    console.error('統計取得エラー:', err);
+    return Response.json({ error: '統計データ取得に失敗しました' }, { status: 500 });
+  }
+}
