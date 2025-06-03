@@ -1,44 +1,44 @@
 // littlebuddha-dev/education/education-0c8aa7b4e15b5720ef44b74b6bbc36cb09462a21/src/app/page.js
-'use client';
+'use client'; //
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { jwtDecode } from 'jwt-decode';
+import { useEffect, useState } from 'react'; //
+import { useRouter } from 'next/navigation'; //
+import { jwtDecode } from 'jwt-decode'; //
 
 export default function HomePage() {
-  const [loading, setLoading] = useState(true);
-  const [dbError, setDbError] = useState(false);
-  const router = useRouter();
+  const [loading, setLoading] = useState(true); //
+  const [dbError, setDbError] = useState(false); //
+  const router = useRouter(); //
 
   // Cookieからトークンを取得するヘルパー関数
   const getCookie = (name) => {
-    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-    return match ? match[2] : null;
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)')); //
+    return match ? match[2] : null; //
   };
 
   useEffect(() => {
     async function checkSetupAndAuth() {
-      const token = getCookie('token');
+      const token = getCookie('token'); //
 
       // まず、テーブルが存在するかどうかを確認
       let usersTableExists = false;
       try {
-        const tableCheckRes = await fetch('/api/tables');
-        const tablesData = await tableCheckRes.json();
-        usersTableExists = tablesData.some(table => table.table_name === 'users');
+        const tableCheckRes = await fetch('/api/tables'); //
+        const tablesData = await tableCheckRes.json(); //
+        usersTableExists = tablesData.some(table => table.table_name === 'users'); //
       } catch (err) {
         console.error('Failed to check table existence:', err);
         setDbError(true);
         setLoading(false);
         // DB接続エラーの場合は、セットアップページへ誘導
-        router.replace('/setup');
+        router.replace('/setup'); //
         return;
       }
 
       if (!usersTableExists) {
         // users テーブルが存在しない場合、セットアップページへリダイレクト
         console.log('Users table not found. Redirecting to setup.');
-        router.replace('/setup');
+        router.replace('/setup'); //
         setLoading(false);
         return;
       }
@@ -46,15 +46,15 @@ export default function HomePage() {
       // users テーブルが存在する場合、認証状態を確認
       if (token) {
         try {
-          const decoded = jwtDecode(token);
+          const decoded = jwtDecode(token); //
           console.log('User logged in:', decoded);
 
           if (decoded.role === 'child') {
-            router.replace('/chat');
+            router.replace('/chat'); //
           } else if (decoded.role === 'parent') {
-            router.replace('/children');
+            router.replace('/children'); //
           } else if (decoded.role === 'admin') {
-            router.replace('/admin/users');
+            router.replace('/admin/users'); //
           }
           setLoading(false);
           return;
@@ -62,7 +62,7 @@ export default function HomePage() {
           console.error('Token decode error in HomePage:', decodeError);
           document.cookie = 'token=; Max-Age=0; path=/;'; // 無効なトークンは削除
           // トークンが無効なら、ログインページへ進む
-          router.replace('/login');
+          router.replace('/login'); //
           setLoading(false);
           return;
         }
@@ -70,7 +70,7 @@ export default function HomePage() {
 
       // トークンがなく、users テーブルが存在する場合、ログインページへリダイレクト
       console.log('No token and users table exists. Redirecting to login.');
-      router.replace('/login');
+      router.replace('/login'); //
       setLoading(false);
     }
 
