@@ -1,3 +1,4 @@
+// littlebuddha-dev/education/education-main/src/app/api/admin/users/[id]/skills/route.js
 import { query } from '@/lib/db';
 import { verifyTokenFromHeader } from '@/lib/auth';
 
@@ -8,15 +9,15 @@ export async function GET(req, { params }) {
       return Response.json({ error: '管理者のみがアクセスできます' }, { status: 403 });
     }
 
-    const parentId = params.id;
+    const targetUserId = params.id; // ここで params.id は、親のユーザーID、または独立した子どものユーザーIDになりうる
 
     // UUID検証（最低限）
-    if (!/^[0-9a-fA-F-]{36}$/.test(parentId)) {
+    if (!/^[0-9a-fA-F-]{36}$/.test(targetUserId)) {
       return Response.json({ error: '不正なユーザーID' }, { status: 400 });
     }
 
     const result = await query(`
-      SELECT 
+      SELECT
         c.id AS child_id,
         c.name AS child_name,
         s.domain,
@@ -25,10 +26,10 @@ export async function GET(req, { params }) {
         MAX(s.recorded_at) AS last_recorded
       FROM children c
       JOIN skill_logs s ON s.child_id = c.id
-      WHERE c.user_id = $1
+      WHERE c.user_id = $1 OR c.child_user_id = $1 -- ✅ 修正: user_id または child_user_id でフィルタリング
       GROUP BY c.id, c.name, s.domain
       ORDER BY c.name, s.domain
-    `, [parentId]);
+    `, [targetUserId]);
 
     return Response.json(result.rows);
   } catch (err) {
