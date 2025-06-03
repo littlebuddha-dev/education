@@ -1,9 +1,9 @@
 // littlebuddha-dev/education/education-0c8aa7b4e15b5720ef44b74b6bbc36cb09462a21/src/app/page.js
-'use client'; // これを忘れずに！
+'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { jwtDecode } from 'jwt-decode'; // jwt-decode を直接インポート
+import { jwtDecode } from 'jwt-decode';
 
 export default function HomePage() {
   const [loading, setLoading] = useState(true);
@@ -20,8 +20,31 @@ export default function HomePage() {
     async function checkSetupAndAuth() {
       const token = getCookie('token');
 
+      // まず、テーブルが存在するかどうかを確認
+      let usersTableExists = false;
+      try {
+        const tableCheckRes = await fetch('/api/tables');
+        const tablesData = await tableCheckRes.json();
+        usersTableExists = tablesData.some(table => table.table_name === 'users');
+      } catch (err) {
+        console.error('Failed to check table existence:', err);
+        setDbError(true);
+        setLoading(false);
+        // DB接続エラーの場合は、セットアップページへ誘導
+        router.replace('/setup');
+        return;
+      }
+
+      if (!usersTableExists) {
+        // users テーブルが存在しない場合、セットアップページへリダイレクト
+        console.log('Users table not found. Redirecting to setup.');
+        router.replace('/setup');
+        setLoading(false);
+        return;
+      }
+
+      // users テーブルが存在する場合、認証状態を確認
       if (token) {
-        // トークンがあれば、ログイン済みと判断して適切なページへリダイレクト
         try {
           const decoded = jwtDecode(token);
           console.log('User logged in:', decoded);
@@ -33,43 +56,22 @@ export default function HomePage() {
           } else if (decoded.role === 'admin') {
             router.replace('/admin/users');
           }
-          setLoading(false); // リダイレクト先が決まったらローディングを終了
-          return; // リダイレクトしたら処理を終了
+          setLoading(false);
+          return;
         } catch (decodeError) {
           console.error('Token decode error in HomePage:', decodeError);
-          // トークンが無効なら、ログイン状態ではないので次へ進む
           document.cookie = 'token=; Max-Age=0; path=/;'; // 無効なトークンは削除
-        }
-      }
-
-      // トークンがない、または無効な場合、セットアップ状況をチェック
-      try {
-        const tableCheckRes = await fetch('/api/tables');
-        const tablesData = await tableCheckRes.json();
-        const usersTableExists = tablesData.some(table => table.table_name === 'users');
-
-        if (!usersTableExists) {
-          // users テーブルが存在しない場合、セットアップページへリダイレクト
-          console.log('Users table not found. Redirecting to setup.');
-          router.replace('/setup');
+          // トークンが無効なら、ログインページへ進む
+          router.replace('/login');
+          setLoading(false);
           return;
         }
-
-        // users テーブルが存在する場合、ログインページへ進む
-        // Adminユーザーの存在チェックは setup ページでハンドルされるか、
-        // ログイン試行時にエラーとして保護者・管理者が対応することになる
-        console.log('Users table exists. Redirecting to login.');
-        router.replace('/login'); // 修正: 常にログインページへリダイレクト
-        setLoading(false); // リダイレクト先が決まったらローディングを終了
-        return;
-
-      } catch (err) {
-        console.error('Setup check error:', err);
-        setDbError(true);
-        setLoading(false);
-        console.log('Database or admin check failed, redirecting to setup as fallback.');
-        router.replace('/setup'); // DB接続自体ができない場合もセットアップに誘導
       }
+
+      // トークンがなく、users テーブルが存在する場合、ログインページへリダイレクト
+      console.log('No token and users table exists. Redirecting to login.');
+      router.replace('/login');
+      setLoading(false);
     }
 
     checkSetupAndAuth();
@@ -93,7 +95,6 @@ export default function HomePage() {
     );
   }
 
-  // トークンがなければ、ログインを促すコンテンツを表示
   return (
     <main style={{ padding: "2rem" }}>
       <h1>教育AIシステムへようこそ！</h1>
