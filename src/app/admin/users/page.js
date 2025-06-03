@@ -95,7 +95,7 @@ export default function AdminUsersPage() {
           </thead>
           <tbody>
             {users.map(user => (
-              <tr key={user.id}><td>{user.last_name} {user.first_name}</td> {/* 修正後 */}
+              <tr key={user.id}><td>{user.last_name} {user.first_name}</td>
                 <td>{user.email}</td>
                 <td>{user.role === 'child' ? '子ども' : user.role === 'parent' ? '保護者' : '管理者'}</td>
                 <td>
