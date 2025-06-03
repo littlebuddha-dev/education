@@ -1,4 +1,4 @@
-// ✅ middleware.js（JWT を Cookie から検査）
+// littlebuddha-dev/education/education-0c8aa7b4e15b5720ef44b74b6bbc36cb09462a21/src/middleware.js
 import { NextResponse } from 'next/server';
 
 // ログイン不要ページの一覧
@@ -7,12 +7,15 @@ const exemptPaths = [
   '/users/register',
   '/api/users/login',
   '/api/users/register',
-  '/favicon.ico'
+  '/favicon.ico',
+  '/setup', // ✅ 追加: セットアップページ
+  '/api/setup', // ✅ 追加: セットアップAPI
+  '/api/tables' // ✅ 追加: テーブル存在チェック用API
 ];
 
 export function middleware(request) {
   const { pathname } = request.nextUrl;
-  const token = request.cookies.get('token')?.value; // ✅ Cookieから取得
+  const token = request.cookies.get('token')?.value;
 
   console.log(`Middleware: Checking auth for path: ${pathname}`);
 
@@ -24,7 +27,7 @@ export function middleware(request) {
   if (!token) {
     console.warn(`Middleware: No token for ${pathname}`);
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('redirectTo', pathname); // ✅ 元に戻る用
+    loginUrl.searchParams.set('redirectTo', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -34,6 +37,14 @@ export function middleware(request) {
 
 export const config = {
   matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - any_other_path (e.g. public folder files)
+     */
+    '/((?!_next/static|_next/image|favicon.ico).*)', // すべてのパスに適用
     '/chat/:path*',
     '/users/:path*',
     '/children/:path*',
@@ -42,6 +53,8 @@ export const config = {
     '/api/users/:path*',
     '/api/children/:path*',
     '/api/admin/:path*',
-    '/api/skills/:path*'
+    '/api/skills/:path*',
+    '/api/setup', // Explicitly add /api/setup
+    '/api/tables' // Explicitly add /api/tables
   ]
 };
