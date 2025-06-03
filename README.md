@@ -63,6 +63,32 @@ cd education-main
 
 プロジェクトルートに `.env.local` ファイルを作成し、以下の環境変数を設定してください。
 
+
+```JavaScript
+// generate-secret.js
+
+const crypto = require('crypto');
+
+// 32バイト（256ビット）のランダムなバイト列を生成し、hex形式の文字列に変換
+const secretKey = crypto.randomBytes(32).toString('hex');
+
+console.log('生成されたSETUP_SECRET_KEY:', secretKey);
+console.log('\nこの鍵を .env.local ファイルの SETUP_SECRET_KEY= の後に追加してください。');
+```
+
+1.鍵生成用スクリプトの作成:
+プロジェクトの任意の場所に、例えば generate-secret.js という名前で新しいファイルを作成し、以下のコードを記述します。
+
+2.スクリプトの実行:
+ターミナルを開き、generate-secret.js を保存したディレクトリに移動し、以下のコマンドを実行します。
+
+```bash
+node generate-secret.js
+```
+
+3.生成された鍵のコピー:
+コマンドを実行すると、以下のような形式で秘密鍵が出力されます。
+
 ```env
 # PostgreSQL データベース接続情報
 PGHOST=localhost
@@ -80,6 +106,8 @@ OPENAI_API_KEY=your_openai_api_key_here
 GEMINI_API_KEY=your_gemini_api_key_here
 CLAUDE_API_KEY=your_claude_api_key_here
 ```
+
+これで SETUP_SECRET_KEY の設定は完了です。Node.jsアプリケーションを再起動して、http://localhost:3000/setup ページから初期セットアップを進めてください。
 
 ### 3. データベースのセットアップ
 
