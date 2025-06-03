@@ -22,24 +22,19 @@ export default function SetupPage() {
         const tables = data.map(row => row.table_name);
 
         if (tables.includes('users')) {
-          // users テーブルが存在する場合、管理ユーザーの存在もチェック
-          const adminCheckRes = await fetch('/api/admin/users', { // 管理者ユーザー取得API
-            headers: { 'Authorization': `Bearer some_dummy_token_for_check_only` } // ダミーのトークンを送信 (middlewareで弾かれるが、存在チェックのみが目的なら問題なし)
-                                                                                  // あるいは、別途認証なしで管理者存在チェックをするAPIを作るべきだが、今回は簡易化
-          });
-          const adminCheckData = await adminCheckRes.json();
-          if (adminCheckRes.ok && adminCheckData.some(user => user.role === 'admin')) {
-            setIsSetupComplete(true); // 管理者ユーザーが存在すればセットアップ済み
-            router.push('/login'); // ログインページへリダイレクト
-            return;
-          }
+          // users テーブルが存在する場合、セットアップ済みと判断し、ログインページへリダイレクト
+          console.log('Users table found. Assuming setup is complete. Redirecting to login.');
+          setIsSetupComplete(true);
+          router.replace('/login');
+          return;
         }
-        // users テーブルが存在しないか、管理者ユーザーが存在しない場合、セットアップが必要
+        // users テーブルが存在しない場合、セットアップが必要
         setIsSetupComplete(false);
 
       } catch (err) {
-        console.warn('Setup status check failed. Assuming setup needed:', err);
+        console.warn('Setup status check failed (e.g., DB connection error). Assuming setup needed:', err);
         setIsSetupComplete(false);
+        setError('データベースに接続できません。PostgreSQLが起動しているか、.env.localの設定を確認してください。'); // ユーザーにエラーを通知
       }
     }
     checkSetupStatus();
