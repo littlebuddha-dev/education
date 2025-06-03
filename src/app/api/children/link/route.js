@@ -1,10 +1,10 @@
 // littlebuddha-dev/education/education-main/src/app/api/children/link/route.js
 import { query } from '@/lib/db';
-import { verifyTokenFromHeader } from '@/lib/auth';
+import { verifyTokenFromCookie } from '@/lib/auth'; // 修正: verifyTokenFromHeader を verifyTokenFromCookie に変更
 
 export async function POST(req) {
   try {
-    const user = verifyTokenFromHeader(req);
+    const user = verifyTokenFromCookie(req); // 修正: verifyTokenFromHeader を verifyTokenFromCookie に変更
     // 保護者ロールのみ許可
     if (user.role !== 'parent') {
       return Response.json({ error: '保護者のみがこの操作を行えます' }, { status: 403 });
