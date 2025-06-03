@@ -1,6 +1,14 @@
 // littlebuddha-dev/education/education-676d25275fadd678f043e2a225217161a768db69/src/lib/db.js
 import { Pool } from 'pg';
 
+console.log('DB Config:', {
+  host: process.env.PGHOST || 'localhost',
+  port: parseInt(process.env.PGPORT || '5432'),
+  user: process.env.PGUSER || 'user',
+  database: process.env.PGDATABASE || 'userdb',
+  // password はログに出力しない (セキュリティのため)
+}); // ✅ 追加: データベース接続設定のログ
+
 const pool = new Pool({
   host: process.env.PGHOST || 'localhost',
   port: parseInt(process.env.PGPORT || '5432'),
@@ -12,52 +20,31 @@ const pool = new Pool({
     : false,
 });
 
-// プールが接続エラーを発生させた場合のイベントリスナーを追加
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  // プロセスを終了させるのではなく、エラーをログに記録し続ける
-  // このエラーは通常、後続のクエリで捕捉されるはず
+  console.error('Unexpected error on idle client (from DB Pool):', err); // ✅ ログメッセージを明確化
 });
 
 export async function query(text, params) {
   try {
+    console.log('Executing query:', text, params); // ✅ 追加: 実行されるクエリのログ
     const result = await pool.query(text, params);
     return result;
   } catch (err) {
-    console.error('Database query error:', err);
-    // エラーを再スローし、呼び出し元で捕捉できるようにする
-    throw err; // ✅ 変更: エラーを再スロー
+    console.error('Database query error (in query function):', err); // ✅ ログメッセージを明確化
+    throw err;
   }
 }
 
-// ✅ 追加: クライアントを取得
 export async function getClient() {
   let client;
   try {
     client = await pool.connect();
+    console.log('Database client connected successfully.'); // ✅ 追加: 接続成功ログ
     return client;
   } catch (err) {
-    console.error('Database client connection error:', err);
-    throw err; // ✅ 変更: エラーを再スロー
+    console.error('Database client connection error (in getClient function):', err); // ✅ ログメッセージを明確化
+    throw err;
   }
 }
 
-// ✅ 追加: クライアントを解放
-export function releaseClient(client) {
-  client.release();
-}
-
-// ✅ 追加: トランザクション開始
-export async function beginTransaction(client) {
-  await client.query('BEGIN');
-}
-
-// ✅ 追加: トランザクションコミット
-export async function commitTransaction(client) {
-  await client.query('COMMIT');
-}
-
-// ✅ 追加: トランザクションロールバック
-export async function rollbackTransaction(client) {
-  await client.query('ROLLBACK');
-}
+// ... (rest of the code)
