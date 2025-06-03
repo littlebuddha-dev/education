@@ -33,6 +33,7 @@ export default function HomePage() {
           } else if (decoded.role === 'admin') {
             router.replace('/admin/users');
           }
+          setLoading(false); // リダイレクト先が決まったらローディングを終了
           return; // リダイレクトしたら処理を終了
         } catch (decodeError) {
           console.error('Token decode error in HomePage:', decodeError);
@@ -54,17 +55,13 @@ export default function HomePage() {
           return;
         }
 
-        // 管理者ユーザーの存在チェック (認証なしで呼び出せるAPIがあれば良いが、なければ簡易的なチェック)
-        // ここでは /api/tables が成功していればDB接続はできていると仮定し、
-        // もしadminユーザーが本当にいない場合、ユーザーは手動で /setup に行くか、登録を促される
-        // または、/api/users を認証なしで叩いてユーザーがいなければ /setup にリダイレクトするなど、より複雑なロジックが必要
-        // 現状の /api/users は認証が必要なため、ここでは直接adminユーザーの存在をチェックするAPI呼び出しは避け、
-        // usersTableExists が true であれば login に進む、というシンプルな流れを維持する。
-        // setupページは、あくまでDBテーブルがないか、adminユーザーがいない場合に「のみ」リダイレクトされるべき。
-        // ログイン済みであれば、上記トークンチェックでリダイレクトされるため、ここには到達しない。
-
-        // 上記リダイレクトが行われなかった場合、ローディング終了
-        setLoading(false);
+        // users テーブルが存在する場合、ログインページへ進む
+        // Adminユーザーの存在チェックは setup ページでハンドルされるか、
+        // ログイン試行時にエラーとして保護者・管理者が対応することになる
+        console.log('Users table exists. Redirecting to login.');
+        router.replace('/login'); // 修正: 常にログインページへリダイレクト
+        setLoading(false); // リダイレクト先が決まったらローディングを終了
+        return;
 
       } catch (err) {
         console.error('Setup check error:', err);
