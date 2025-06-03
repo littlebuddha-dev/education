@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS conversation_logs (
 CREATE TABLE IF NOT EXISTS evaluation_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    child_id UUID REFERENCES children(id) ON DELETE SET NULL, -- ✅ 追加: child_id を追加し、子どもの情報に紐付ける
     conversation_id UUID REFERENCES conversation_logs(id) ON DELETE SET NULL, -- 会話ログが削除されても評価は残る
     subject VARCHAR(255),
     domain VARCHAR(255),
@@ -76,6 +77,6 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_children_user_id ON children(user_id);
 CREATE INDEX IF NOT EXISTS idx_conversation_logs_user_id ON conversation_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_evaluation_logs_user_id ON evaluation_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_evaluation_logs_child_id ON evaluation_logs(child_id); -- 後で child_id を evaluation_logs に追加する場合に備え
+CREATE INDEX IF NOT EXISTS idx_evaluation_logs_child_id ON evaluation_logs(child_id); -- ✅ 追加: child_id のインデックス
 CREATE INDEX IF NOT EXISTS idx_skill_scores_user_subject_domain ON skill_scores(user_id, subject, domain);
 CREATE INDEX IF NOT EXISTS idx_skill_logs_child_id ON skill_logs(child_id);
