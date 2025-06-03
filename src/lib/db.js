@@ -1,4 +1,4 @@
-// src/lib/db.js
+// littlebuddha-dev/education/education-676d25275fadd678f043e2a225217161a768db69/src/lib/db.js
 import { Pool } from 'pg';
 
 const pool = new Pool({
@@ -12,21 +12,34 @@ const pool = new Pool({
     : false,
 });
 
+// プールが接続エラーを発生させた場合のイベントリスナーを追加
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client', err);
+  // プロセスを終了させるのではなく、エラーをログに記録し続ける
+  // このエラーは通常、後続のクエリで捕捉されるはず
+});
+
 export async function query(text, params) {
   try {
     const result = await pool.query(text, params);
     return result;
   } catch (err) {
     console.error('Database query error:', err);
-    // エラーオブジェクトにrowsプロパティが存在しない可能性があるため、安全にアクセス
-    return { rows: [], error: err };
+    // エラーを再スローし、呼び出し元で捕捉できるようにする
+    throw err; // ✅ 変更: エラーを再スロー
   }
 }
 
 // ✅ 追加: クライアントを取得
 export async function getClient() {
-  const client = await pool.connect();
-  return client;
+  let client;
+  try {
+    client = await pool.connect();
+    return client;
+  } catch (err) {
+    console.error('Database client connection error:', err);
+    throw err; // ✅ 変更: エラーを再スロー
+  }
 }
 
 // ✅ 追加: クライアントを解放
