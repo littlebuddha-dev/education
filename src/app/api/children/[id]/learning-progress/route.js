@@ -1,12 +1,12 @@
 // littlebuddha-dev/education/education-main/src/app/api/children/[id]/learning-progress/route.js
 import { query } from '@/lib/db';
-import { verifyTokenFromHeader } from '@/lib/auth';
+import { verifyTokenFromCookie } from '@/lib/auth'; // 修正: verifyTokenFromHeader を verifyTokenFromCookie に変更
 
 export async function GET(req, { params }) {
   const childId = params.id;
 
   try {
-    const user = verifyTokenFromHeader(req);
+    const user = verifyTokenFromCookie(req); // 修正: verifyTokenFromHeader を verifyTokenFromCookie に変更
 
     // 子どもが認証済みユーザーに紐づくか確認（保護者）
     const childCheck = await query(
