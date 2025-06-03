@@ -1,3 +1,4 @@
+// src/components/ChildRegisterButton.js
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -9,11 +10,13 @@ export default function ChildRegisterButton({ userId }) {
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) return;
 
     try {
       const decoded = jwtDecode(token);
+      // 親のuser_idと一致し、かつ親ロールの場合のみ表示
       if (decoded.id === userId && decoded.role === 'parent') {
         setCanShow(true);
       }
@@ -21,6 +24,12 @@ export default function ChildRegisterButton({ userId }) {
       // 無効なトークンは何もしない
     }
   }, [userId]);
+
+  // ✅ Cookie から値を取り出す関数 (ChatUI からコピー)
+  function getCookie(name) {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? match[2] : null;
+  }
 
   if (!canShow) return null;
 
