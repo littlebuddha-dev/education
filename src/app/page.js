@@ -1,9 +1,9 @@
 // littlebuddha-dev/education/education-0c8aa7b4e15b5720ef44b74b6bbc36cb09462a21/src/app/page.js
-'use client'; //
+'use client'; // これを忘れずに！
 
 import { useEffect, useState } from 'react'; //
 import { useRouter } from 'next/navigation'; //
-import { jwtDecode } from 'jwt-decode'; //
+import { jwtDecode } from 'jwt-decode'; // jwt-decode を直接インポート
 
 export default function HomePage() {
   const [loading, setLoading] = useState(true); //
@@ -22,28 +22,31 @@ export default function HomePage() {
 
       // まず、テーブルが存在するかどうかを確認
       let usersTableExists = false;
+      let isDbConnected = false;
       try {
         const tableCheckRes = await fetch('/api/tables'); //
-        const tablesData = await tableCheckRes.json(); //
-        usersTableExists = tablesData.some(table => table.table_name === 'users'); //
+        const data = await tableCheckRes.json(); //
+        isDbConnected = data.success; //
+        if (isDbConnected) { //
+          usersTableExists = data.tables.some(table => table.table_name === 'users'); //
+        }
       } catch (err) {
-        console.error('Failed to check table existence:', err);
+        console.error('Failed to check table existence or DB connection:', err);
         setDbError(true);
         setLoading(false);
-        // DB接続エラーの場合は、セットアップページへ誘導
-        router.replace('/setup'); //
+        router.replace('/setup'); // DB接続エラーの場合は、セットアップページへ誘導
         return;
       }
 
-      if (!usersTableExists) {
-        // users テーブルが存在しない場合、セットアップページへリダイレクト
-        console.log('Users table not found. Redirecting to setup.');
+      if (!isDbConnected || !usersTableExists) {
+        // DB接続ができていない、またはusersテーブルが存在しない場合、セットアップページへリダイレクト
+        console.log('DB not connected or Users table not found. Redirecting to setup.');
         router.replace('/setup'); //
         setLoading(false);
         return;
       }
 
-      // users テーブルが存在する場合、認証状態を確認
+      // users テーブルが存在し、DB接続もOKの場合、認証状態を確認
       if (token) {
         try {
           const decoded = jwtDecode(token); //
@@ -56,22 +59,22 @@ export default function HomePage() {
           } else if (decoded.role === 'admin') {
             router.replace('/admin/users'); //
           }
-          setLoading(false);
-          return;
+          setLoading(false); //
+          return; //
         } catch (decodeError) {
           console.error('Token decode error in HomePage:', decodeError);
           document.cookie = 'token=; Max-Age=0; path=/;'; // 無効なトークンは削除
           // トークンが無効なら、ログインページへ進む
           router.replace('/login'); //
-          setLoading(false);
-          return;
+          setLoading(false); //
+          return; //
         }
       }
 
-      // トークンがなく、users テーブルが存在する場合、ログインページへリダイレクト
+      // トークンがなく、users テーブルが存在し、DB接続もOKの場合、ログインページへリダイレクト
       console.log('No token and users table exists. Redirecting to login.');
       router.replace('/login'); //
-      setLoading(false);
+      setLoading(false); //
     }
 
     checkSetupAndAuth();
@@ -95,6 +98,7 @@ export default function HomePage() {
     );
   }
 
+  // トークンがなければ、ログインを促すコンテンツを表示
   return (
     <main style={{ padding: "2rem" }}>
       <h1>教育AIシステムへようこそ！</h1>
