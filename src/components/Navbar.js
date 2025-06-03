@@ -35,7 +35,7 @@ export default function Navbar() {
     router.push('/login');
   };
 
-  // ✅ getCookie 関数 (ChatUIからコピー)
+  // ✅ Cookie から値を取り出す関数 (ChatUIからコピー)
   function getCookie(name) {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
     return match ? match[2] : null;
@@ -60,30 +60,43 @@ export default function Navbar() {
           {/* ロールに応じたナビゲーション */}
           {tokenInfo.role === 'parent' && (
             <>
-              <a href="/users">ユーザー</a>
-              <a href="/children">子ども</a>
-              <a href="/children/link">子ども紐付け</a> {/* ✅ 追加 */}
+              <a href="/users">ユーザー管理</a> {/* ✅ リンクテキスト変更 */}
+              <a href="/children">子ども一覧</a> {/* ✅ リンクテキスト変更 */}
+              <a href="/children/register">子ども登録</a> {/* ✅ 追加 */}
+              <a href="/children/link">子ども紐付け</a>
             </>
           )}
 
-          {tokenInfo.role === 'child' && ( // ✅ child ロール用のリンク
+          {tokenInfo.role === 'child' && (
             <>
               <a href="/chat">チャット</a>
-              {/* 子どもが自身の学習履歴を見るページへのリンク（任意で作成） */}
+              {/* 子どもが自身の学習履歴を見るページへのリンク */}
+              {/* 子どもは自分の children.id をNavbarで直接取得できないため、一旦 /children/自分のuser_id/skills とする */}
+              {/* 理想的には、/children/[id]/skills の [id] が children.id に対応する API を作成し、
+                 NavbarではAPIを叩いてchildren.idを取得してからリダイレクトするべきです。
+                 しかし、ここでは簡易的に users.id を使ってリンクを生成します。
+                 user.id と children.id が異なる場合、このリンクは機能しない可能性がありますので注意してください。 */}
               <a href={`/children/${tokenInfo.id}/skills`}>学習状況</a> {/* 仮のリンク、children.id に修正必要 */}
+              <a href={`/children/${tokenInfo.id}/evaluation`}>スキル評価</a> {/* ✅ 追加 */}
             </>
           )}
 
           {tokenInfo.role === 'admin' && (
             <>
-              <a href="/admin/users">全ユーザー</a>
+              <a href="/admin/users">全ユーザー管理</a> {/* ✅ リンクテキスト変更 */}
+              {/* 必要に応じて、管理者用の他のリンクも追加 */}
             </>
           )}
 
-          <button onClick={handleLogout}>ログアウト</button>
+          <button onClick={handleLogout} style={{ marginLeft: 'auto' }}>ログアウト</button> {/* ✅ スタイル調整 */}
         </div>
       ) : (
-        <button onClick={handleLogin}>ログイン</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}> {/* ✅ 未ログイン時のボタンもdivで囲む */}
+          <button onClick={handleLogin}>ログイン</button>
+          <a href="/users/register" style={{ padding: '0.5rem 1rem', backgroundColor: '#0070f3', color: 'white', textDecoration: 'none', borderRadius: '5px' }}>
+            新規登録
+          </a>
+        </div>
       )}
     </nav>
   );
