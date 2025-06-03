@@ -1,10 +1,12 @@
 // littlebuddha-dev/education/education-main/src/app/api/children/route.js
 import { query } from '@/lib/db';
-import { verifyTokenFromHeader } from '@/lib/auth';
+// import { verifyTokenFromHeader } from '@/lib/auth'; // ❌ 削除
+import { verifyTokenFromCookie } from '@/lib/auth'; // ✅ Cookieから取得するように変更
 
 export async function POST(req) {
   try {
-    const user = verifyTokenFromHeader(req);
+    // const user = verifyTokenFromHeader(req); // ❌ 変更
+    const user = verifyTokenFromCookie(req); // ✅ Cookieから取得
     // 保護者ロールのみ、user_id を指定して子どもを登録可能
     if (user.role !== 'parent') {
       return Response.json({ error: 'この操作は保護者のみ可能です' }, { status: 403 });
@@ -30,7 +32,8 @@ export async function POST(req) {
 
 export async function GET(req) {
   try {
-    const user = verifyTokenFromHeader(req);
+    // const user = verifyTokenFromHeader(req); // ❌ 変更
+    const user = verifyTokenFromCookie(req); // ✅ Cookieから取得
 
     const { searchParams } = new URL(req.url);
     const childId = searchParams.get('id'); // 単一の子ども取得用
