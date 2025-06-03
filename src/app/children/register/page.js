@@ -1,3 +1,4 @@
+// src/app/children/register/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,7 +14,8 @@ export default function ChildRegisterPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) {
       router.push('/login');
       return;
@@ -21,12 +23,13 @@ export default function ChildRegisterPage() {
 
     try {
       const decoded = jwtDecode(token);
-      if (decoded.role !== 'parent') {
+      if (decoded.role === 'parent') {
+        setLastName(decoded.last_name); // 親の苗字を保存
+      } else {
         setError('このページは保護者のみアクセスできます');
-        return;
+        // 子どもが誤ってアクセスした場合の対処
+        router.replace('/chat'); // 例えばチャットページにリダイレクト
       }
-
-      setLastName(decoded.last_name); // 親の苗字を保存
     } catch {
       setError('無効なトークンです');
     }
@@ -36,8 +39,16 @@ export default function ChildRegisterPage() {
     e.preventDefault();
     setError('');
 
-    const token = localStorage.getItem('token');
-    const fullName = `${lastName} ${firstName}`; // 👈 結合
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
+    const decoded = jwtDecode(token);
+
+    if (decoded.role !== 'parent') { // 保護者以外は登録できないようにする
+        setError('この操作は保護者のみ可能です');
+        return;
+    }
+
+    const fullName = `${lastName} ${firstName}`;
 
     try {
       const res = await fetch('/api/children', {
@@ -64,6 +75,11 @@ export default function ChildRegisterPage() {
     }
   };
 
+  // ✅ Cookie から値を取り出す関数 (ChatUI からコピー)
+  function getCookie(name) {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? match[2] : null;
+  }
 
   return (
     <main style={{ padding: '2rem', maxWidth: '600px' }}>
@@ -73,18 +89,18 @@ export default function ChildRegisterPage() {
 
       <form onSubmit={handleSubmit}>
         <label>
-  名前：
-  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-    <span>{lastName}</span> {/* 親の苗字を表示 */}
-    <input
-      type="text"
-      placeholder="下の名前"
-      value={firstName}
-      onChange={e => setFirstName(e.target.value)}
-      required
-    />
-  </div>
-</label>
+          名前：
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <span>{lastName}</span> {/* 親の苗字を表示 */}
+            <input
+              type="text"
+              placeholder="下の名前"
+              value={firstName}
+              onChange={e => setFirstName(e.target.value)}
+              required
+            />
+          </div>
+        </label>
 
 
         <label>
