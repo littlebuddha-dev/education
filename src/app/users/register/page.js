@@ -1,3 +1,4 @@
+// littlebuddha-dev/education/education-main/src/app/users/register/page.js
 'use client';
 
 import { useState } from 'react';
@@ -8,6 +9,7 @@ export default function UserRegisterPage() {
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState('parent'); // ✅ 追加: role の状態と初期値
   const [error, setError] = useState(null);
   const router = useRouter();
 
@@ -22,7 +24,7 @@ export default function UserRegisterPage() {
       const res = await fetch('/api/users/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName }),
+        body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName, role }), // ✅ role を追加
       });
       const data = await res.json();
       if (data.error) {
@@ -39,8 +41,13 @@ export default function UserRegisterPage() {
       const loginData = await loginRes.json();
 
       if (loginData.token) {
-        localStorage.setItem('token', loginData.token); // JWT保存
-        router.push('/users');
+        document.cookie = `token=${loginData.token}; path=/; max-age=3600; SameSite=Lax`; // ✅ Cookie保存に変更（localStorage廃止の方向性）
+        // 登録されたロールによってリダイレクト先を調整
+        if (role === 'child') {
+          router.push('/chat'); // 子供は直接チャットページへ
+        } else {
+          router.push('/users'); // 親はユーザー一覧などへ
+        }
       } else {
         setError('ログインに失敗しました');
       }
@@ -79,6 +86,17 @@ export default function UserRegisterPage() {
         <label>
           パスワード：
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+      </div>
+
+      {/* ✅ ロールの選択を追加 */}
+      <div style={{ marginBottom: '1rem' }}>
+        <label>
+          登録種別：
+          <select value={role} onChange={(e) => setRole(e.target.value)} style={{ marginLeft: '0.5rem', padding: '0.3rem' }}>
+            <option value="parent">保護者</option>
+            <option value="child">子ども</option>
+          </select>
         </label>
       </div>
 
