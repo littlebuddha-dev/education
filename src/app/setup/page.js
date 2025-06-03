@@ -10,9 +10,9 @@ export default function SetupPage() {
   const [setupSecretKey, setSetupSecretKey] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(true); // ロード状態を追加
-  const [isDbConnected, setIsDbConnected] = useState(false); // DB接続状態
-  const [needsSetup, setNeedsSetup] = useState(false); // セットアップが必要かどうか
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDbConnected, setIsDbConnected] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
   const router = useRouter();
 
   // ページロード時にセットアップ状況をチェックする
@@ -23,35 +23,27 @@ export default function SetupPage() {
       setMessage('');
 
       try {
-        const res = await fetch('/api/tables'); // データベース接続とテーブルリストを取得
-        const data = await res.json(); //
+        const res = await fetch('/api/tables');
+        const data = await res.json();
 
-        if (!data.success) { // DB接続エラーの場合
-          setIsDbConnected(false); //
-          setError(data.error || 'データベース接続に失敗しました。'); //
+        if (!data.success) {
+          setIsDbConnected(false);
+          setError(data.error || 'データベース接続に失敗しました。');
           setNeedsSetup(true); // DB接続自体ができていないので、セットアップが必要と判断
           return;
         }
 
-        setIsDbConnected(true); //
-        const tables = data.tables.map(row => row.table_name); //
-        const usersTableFound = tables.includes('users'); //
+        setIsDbConnected(true);
+        const tables = data.tables.map(row => row.table_name);
+        const usersTableFound = tables.includes('users');
 
         if (!usersTableFound) {
-          // users テーブルが存在しない場合、セットアップが必要
           setNeedsSetup(true);
           setMessage('データベーステーブルが未作成です。システムを初期セットアップしてください。');
         } else {
-          // users テーブルが存在する場合、管理者ユーザーの存在をサーバーサイドで確認する
-          // ここではあくまで初期ロード時のチェックであり、管理者ユーザーの正確な存在は
-          // /api/setup が責任を持つ。もし存在すればログインページへリダイレクト。
-          // 存在しなければ、セットアップフォームを表示。
-          // 既存の管理者ユーザーがいてこのページに来ることは、原則としてないはず
-          // （/app/page.js でログイン済みならリダイレクトされるため）。
-          // なので、usersテーブルがあれば、管理者ユーザーの存在を確認するAPIを叩くのではなく、
-          // ログインページへリダイレクトするのが自然。
-          console.log('Users table found. Redirecting to login as setup is likely complete or login is required.');
-          router.replace('/login');
+          // users テーブルが存在する場合、セットアップは完了していると判断し、ログインページへリダイレクト
+          // needsSetup を false に設定し、下のuseEffectでリダイレクトをトリガー
+          setNeedsSetup(false);
         }
       } catch (err) {
         console.warn('Setup status check failed:', err);
@@ -64,6 +56,16 @@ export default function SetupPage() {
     }
     checkSetupStatus();
   }, [router]);
+
+  // needsSetup の状態に基づいてリダイレクトを行うuseEffect
+  useEffect(() => {
+    // isLoading が false になり、かつ needsSetup が false (つまりセットアップが不要) であればリダイレクト
+    if (!isLoading && isDbConnected && !needsSetup) {
+      console.log('Setup page: Users table exists, redirecting to login.');
+      router.replace('/login');
+    }
+  }, [isLoading, isDbConnected, needsSetup, router]);
+
 
   const handleSetup = async (e) => {
     e.preventDefault();
@@ -80,24 +82,24 @@ export default function SetupPage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-setup-secret-key': setupSecretKey, // 秘密鍵をヘッダーで送信
+          'x-setup-secret-key': setupSecretKey,
         },
-        body: JSON.stringify({ adminEmail, adminPassword }), //
+        body: JSON.stringify({ adminEmail, adminPassword }),
       });
 
-      const data = await res.json(); //
+      const data = await res.json();
 
-      if (res.ok) { //
-        setMessage(data.message + ' ログインページへ移動します。'); //
+      if (res.ok) {
+        setMessage(data.message + ' ログインページへ移動します。');
         // セットアップ成功後、ログインページへリダイレクト
         setTimeout(() => {
-          router.push('/login'); //
+          router.push('/login');
         }, 3000);
       } else {
-        setError(data.error || 'セットアップに失敗しました。'); //
+        setError(data.error || 'セットアップに失敗しました。');
       }
     } catch (err) {
-      console.error('セットアップエラー:', err); //
+      console.error('セットアップエラー:', err);
       setError('ネットワークエラーが発生しました。または、サーバーでエラーが発生しました。');
     }
   };
@@ -191,9 +193,10 @@ export default function SetupPage() {
     );
   }
 
-  // ここに到達する場合、通常は users テーブルが存在し、かつリダイレクトされなかったケース
-  // すでにセットアップ済みと判断し、ログインページへリダイレクト
-  console.log('Setup page: Users table exists, redirecting to login.');
+  // needsSetup が false で、かつ上記のifブロックに入らなかった場合 (基本的にはここには到達しない想定だが、念のため)
+  // ロードが終わって、DB接続もできていて、needsSetupもfalseなら、本来はuseEffectでリダイレクトされる
+  // しかし、何らかの理由でここに到達した場合、ログインページへリダイレクトするためのフォールバック
+  console.log('Setup page: Fallback redirect to login.');
   router.replace('/login');
   return <main style={{ padding: '2rem' }}><p>システムは既にセットアップされています。ログインページへリダイレクト中...</p></main>;
 }
