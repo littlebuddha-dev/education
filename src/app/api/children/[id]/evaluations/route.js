@@ -1,3 +1,4 @@
+// src/app/api/children/[id]/evaluations/route.js
 import { query } from '@/lib/db';
 
 export async function GET(_, { params }) {
@@ -12,7 +13,7 @@ export async function GET(_, { params }) {
     const result = await query(`
       SELECT subject, domain, level, reason, recommendation, created_at
       FROM evaluation_logs
-      WHERE child_id = $1
+      WHERE child_id = $1 -- ✅ child_id でフィルタリング
       ORDER BY created_at DESC
     `, [childId]);
 
