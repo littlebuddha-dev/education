@@ -24,7 +24,7 @@ export default function SetupPage() {
 
       try {
         const res = await fetch('/api/tables'); // データベース接続とテーブルリストを取得
-        const data = await res.json(); //
+        const data = await res.json();
 
         if (!data.success) { // DB接続エラーの場合
           setIsDbConnected(false);
@@ -35,39 +35,24 @@ export default function SetupPage() {
 
         setIsDbConnected(true);
         const tables = data.tables.map(row => row.table_name);
-        const usersTableFound = tables.includes('users'); //
+        const usersTableFound = tables.includes('users');
 
         if (!usersTableFound) {
           // users テーブルが存在しない場合、セットアップが必要
           setNeedsSetup(true);
           setMessage('データベーステーブルが未作成です。システムを初期セットアップしてください。');
         } else {
-          // users テーブルが存在する場合、管理者ユーザーの存在を確認
+          // users テーブルが存在する場合、管理者ユーザーの存在を認証不要なAPIで確認
           let adminUserFound = false;
           try {
-            // 管理者ユーザー一覧APIを叩いて、管理者ユーザーが存在するかどうかを確認
-            // このAPIは管理者ロールでなければ403を返すため、ログインしていなければ基本アクセスできない
-            // しかし、テーブルは存在しているので、管理者ユーザーがまだ登録されていない可能性をチェックする
-            const adminCheckRes = await fetch('/api/admin/users', {
-              // headersにAuthorizationを含めないことで、未認証状態でAPIを叩き、
-              // 403が返ることを期待して管理者ユーザーが存在しないことを確認する
-              // ただし、もし認証済みの非管理者ユーザーがいた場合も403が返るため、
-              // 厳密には管理者ユーザーが存在しないことの証明にはならないが、
-              // このセットアップフローにおいては十分なヒューリスティック
-            });
+            // ✅ 変更: /api/admin/users ではなく /api/users/check-admin を使用
+            const adminCheckRes = await fetch('/api/users/check-admin');
+            const adminCheckData = await adminCheckRes.json();
 
             if (adminCheckRes.ok) {
-              // 認証済み管理者ユーザーとしてAPIにアクセスできた場合
-              const adminUsers = await adminCheckRes.json();
-              adminUserFound = adminUsers.some(user => user.role === 'admin'); //
-            } else if (adminCheckRes.status === 403) {
-              // 権限がない（未ログインまたは非管理者）ためアクセス拒否された場合
-              // この場合、管理者ユーザーがまだ登録されていない可能性がある
-              adminUserFound = false;
+              adminUserFound = adminCheckData.adminExists;
             } else {
-              // その他のエラー (例: 500エラーなど)
-              const errorData = await adminCheckRes.json();
-              setError(errorData.error || '管理者ユーザーの存在確認中に予期せぬエラーが発生しました。');
+              setError(adminCheckData.error || '管理者ユーザーの存在確認中に予期せぬエラーが発生しました。');
               setNeedsSetup(true); // エラーが発生した場合はセットアップが必要と判断
               return;
             }
