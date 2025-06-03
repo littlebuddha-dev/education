@@ -13,8 +13,10 @@ export async function GET() {
     return Response.json({ success: true, tables: result.rows });
   } catch (err) {
     console.error('Error fetching table list or connecting to DB:', err);
-    // 接続失敗やエラーの場合は、success: false とエラーメッセージを返す
-    // データベース接続のエラーの種類を判別して、より具体的なメッセージを返す
+    // ここで err オブジェクト全体をログに出力し、詳細を確認します。
+    // 特に err.code や err.message を確認してください。
+    console.error('Full DB error object:', err); // ✅ 追加
+
     let errorMessage = 'DB接続に失敗しました。PostgreSQLが起動しているか、.env.localの設定を確認してください。';
     if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') {
       errorMessage = 'データベースホストが見つからないか、接続が拒否されました。ホスト名、ポート、またはデータベースが起動しているか確認してください。';
@@ -23,6 +25,7 @@ export async function GET() {
     } else if (err.code === '3D000') { // PostgreSQL invalid_catalog_name
       errorMessage = '指定されたデータベースが存在しません。データベース名が正しいか確認してください。';
     } else {
+      // 予測できないエラーの場合、汎用メッセージにエラー詳細を付加
       errorMessage = `データベースエラー: ${err.message}`;
     }
 
