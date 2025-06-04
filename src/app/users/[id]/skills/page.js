@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { jwtDecode } from 'jwt-decode';
+import { getCookie } from '@/utils/authUtils';
 
 export default function UserSkillsPage() {
   const [skills, setSkills] = useState([]);
