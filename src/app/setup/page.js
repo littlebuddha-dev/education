@@ -1,8 +1,9 @@
-// littlebuddha-dev/education/education-676d25275fadd678f043e2a225217161a768db69/src/app/setup/page.js
+// src/app/setup/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { removeAuthCookie } from '@/utils/authUtils'; // removeAuthCookie をインポート
 
 export default function SetupPage() {
   const [adminEmail, setAdminEmail] = useState('');
@@ -17,6 +18,10 @@ export default function SetupPage() {
 
   // ページロード時にセットアップ状況をチェックする
   useEffect(() => {
+    // ✅ 追加: セットアップページにアクセスしたら既存の認証クッキーを削除
+    console.log('🧹 SetupPage: 既存の認証クッキーを削除します。');
+    removeAuthCookie(); // removeAuthCookie 関数を呼び出す
+
     async function checkSetupStatus() {
       setIsLoading(true);
       setError('');
@@ -82,16 +87,7 @@ export default function SetupPage() {
       }
     }
     checkSetupStatus();
-  }, [router]); // router の変更時にも再実行
-
-  // needsSetup の状態に基づいてリダイレクトを行うuseEffect
-  useEffect(() => {
-    // ロードが終わって、isDbConnectedがtrue（DB接続OK）かつneedsSetupがfalse（セットアップ不要）であればログインページへリダイレクト
-    if (!isLoading && isDbConnected && !needsSetup) {
-      console.log('Setup page: Users table and admin user exist. Redirecting to login.');
-      router.replace('/login');
-    }
-  }, [isLoading, isDbConnected, needsSetup, router]);
+  }, [router]); // pathnameとrouterを依存関係に
 
   const handleSetup = async (e) => {
     e.preventDefault();
