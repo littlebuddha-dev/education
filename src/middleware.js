@@ -1,4 +1,4 @@
-// littlebuddha-dev/education/education-0c8aa7b4e15b5720ef44b74b6bbc36cb09462a21/src/middleware.js
+// src/middleware.js
 import { NextResponse } from 'next/server';
 
 // ログイン不要ページの一覧
@@ -11,53 +11,76 @@ const exemptPaths = [
   '/setup',
   '/api/setup',
   '/api/tables',
-  '/api/users/check-admin' // ✅ 追加: 管理者存在チェックAPI
+  '/api/users/check-admin',
+  '/_next', // Next.jsの内部ファイル
+  '/static' // 静的ファイル
 ];
 
 export function middleware(request) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('token')?.value;
 
-  console.log(`Middleware: Checking auth for path: ${pathname}`);
+  console.log(`Middleware: パス: ${pathname}, トークン: ${token ? '有り' : '無し'}`);
 
+  // 除外パスの確認
   if (exemptPaths.some(p => pathname.startsWith(p))) {
-    console.log(`Middleware: Skipped for exempt path: ${pathname}`);
+    console.log(`Middleware: 除外パス: ${pathname}`);
     return NextResponse.next();
   }
 
+  // トークンが無い場合
   if (!token) {
-    console.warn(`Middleware: No token for ${pathname}`);
+    console.log(`Middleware: トークンなし、ログインページにリダイレクト: ${pathname}`);
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirectTo', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  console.log(`Middleware: Token found for ${pathname}`);
-  return NextResponse.next();
+  // トークンの簡易検証
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      console.log('Middleware: 無効なトークン形式');
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirectTo', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    // ペイロードのデコード（期限切れチェック）
+    const payload = JSON.parse(atob(parts[1]));
+    if (payload.exp && Date.now() >= payload.exp * 1000) {
+      console.log('Middleware: トークンが期限切れ');
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('redirectTo', pathname);
+      const response = NextResponse.redirect(loginUrl);
+      // 期限切れのCookieを削除
+      response.cookies.set('token', '', { maxAge: 0, path: '/' });
+      return response;
+    }
+
+    console.log(`Middleware: 有効なトークン、アクセス許可: ${pathname}`);
+    return NextResponse.next();
+
+  } catch (err) {
+    console.error('Middleware: トークンデコードエラー:', err);
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('redirectTo', pathname);
+    const response = NextResponse.redirect(loginUrl);
+    // 無効なCookieを削除
+    response.cookies.set('token', '', { maxAge: 0, path: '/' });
+    return response;
+  }
 }
 
 export const config = {
   matcher: [
     /*
-     * Match all request paths except for the ones starting with:
+     * 以下のパス以外のすべてのリクエストにマッチします:
+     * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * - any_other_path (e.g. public folder files)
      */
-    '/((?!_next/static|_next/image|favicon.ico).*)', // すべてのパスに適用
-    // 以下は明示的に追加するパスの例、上の行でほぼ全てカバーされるが、念のため
-    '/chat/:path*',
-    '/users/:path*',
-    '/children/:path*',
-    '/admin/:path*',
-    '/api/chat/:path*',
-    '/api/users/:path*',
-    '/api/children/:path*',
-    '/api/admin/:path*',
-    '/api/skills/:path*',
-    '/api/setup',
-    '/api/tables',
-    '/api/users/check-admin' // ✅ 追加: 管理者存在チェックAPI
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ]
 };
