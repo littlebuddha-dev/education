@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import { useRouter } from 'next/navigation';
+import { getCookie } from '@/utils/authUtils';
 
 export default function ChildRegisterButton({ userId }) {
   const [canShow, setCanShow] = useState(false);
