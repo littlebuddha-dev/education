@@ -3,7 +3,8 @@
 
 import { useEffect, useState } from 'react';
 import { jwtDecode } from 'jwt-decode';
-import { useRouter } from 'next/navigation'; // ✅ 追加
+import { useRouter } from 'next/navigation';
+import { getCookie } from '@/utils/authUtils';
 
 export default function ChildrenPage() {
   const [children, setChildren] = useState([]);
