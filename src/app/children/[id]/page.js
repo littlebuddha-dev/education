@@ -4,7 +4,8 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import SkillLogForm from '@/components/SkillLogForm';
-import { jwtDecode } from 'jwt-decode'; // ✅ 追加
+import { jwtDecode } from 'jwt-decode';
+import { getCookie } from '@/utils/authUtils';
 
 export default function ChildDetailPage() {
   const params = useParams();
