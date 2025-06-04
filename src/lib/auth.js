@@ -1,9 +1,8 @@
-// littlebuddha-dev/education/education-af9f7cc579e22203496449ba55f5ee95bf0f4648/src/lib/auth.js
+// src/lib/auth.js
 import jwt from 'jsonwebtoken';
-// import { NextResponse } from 'next/server'; // NextResponse は直接使用しないため削除
-// import { getCookie } from '@/utils/authUtils'; // getCookie はサーバーサイドでは使わないため削除
 
-const SECRET = process.env.JWT_SECRET || 'default-secret';
+// ⚠️ CRITICAL: login/route.js と同じ値を使用
+const SECRET = process.env.JWT_SECRET || 'secret'; // ✅ 'default-secret' から 'secret' に変更
 
 // Cookie からトークンを取得し検証する関数 (サーバーサイド用)
 export function verifyTokenFromCookie(req) {
@@ -30,14 +29,29 @@ export function verifyTokenFromCookie(req) {
     }
   }
 
-  if (!token) {
-    throw new Error('認証トークン（Cookie）が見つかりません');
+  // Authorization ヘッダーからの取得（Bearer トークン対応）
+  if (!token && req.headers.has('authorization')) {
+    const authHeader = req.headers.get('authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+      console.log('🔑 Authorization ヘッダーからトークン取得');
+    }
   }
 
+  if (!token) {
+    throw new Error('認証トークン（Cookie または Authorization ヘッダー）が見つかりません');
+  }
+
+  console.log('🔑 トークン取得成功:', token.substring(0, 20) + '...');
+  console.log('🔑 SECRET使用:', SECRET);
+
   try {
-    return jwt.verify(token, SECRET);
+    const decoded = jwt.verify(token, SECRET);
+    console.log('🔑 トークン検証成功:', decoded.role, decoded.email);
+    return decoded;
   } catch (err) {
-    console.error('トークン検証エラー:', err); // エラーを詳細にログ出力
+    console.error('🔑 トークン検証エラー:', err.message);
+    console.error('🔑 JWT_SECRET:', process.env.JWT_SECRET ? '設定済み' : '未設定');
     throw new Error('無効な認証トークンです');
   }
 }
