@@ -5,11 +5,18 @@ import jwt from 'jsonwebtoken';
 
 // ⚠️ CRITICAL: auth.js と同じ値を使用
 const JWT_SECRET = process.env.JWT_SECRET || 'secret'; // ✅ デフォルト値を 'secret' に統一
+// もしJWT_SECRETが.env.localに設定されていない場合、この'secret'が使われます。
+// デバッグのため、明示的に環境変数の値を使うようにすることもできます。
+// const JWT_SECRET = process.env.JWT_SECRET;
+// if (!JWT_SECRET) {
+//   throw new Error("JWT_SECRET is not set in .env.local");
+// }
 
 export async function POST(req) {
   try {
-    console.log('🔐 ログインAPI JWT_SECRET:', JWT_SECRET); // ✅ デバッグ追加
-    
+    // console.log('🔐 ログインAPI JWT_SECRET:', JWT_SECRET); // ✅ デバッグ追加 (これはそのまま残しても良い)
+    console.log('🔐 ログインAPI JWT_SECRETの最初の10文字:', JWT_SECRET.substring(0, 10) + '...'); // デバッグで完全な秘密鍵が出力されないようにする
+
     const { email, password } = await req.json();
 
     const result = await query(
