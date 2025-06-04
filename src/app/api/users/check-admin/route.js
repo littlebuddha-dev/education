@@ -1,4 +1,4 @@
-// littlebuddha-dev/education/education-af9f7cc579e22203496449ba55f5ee95bf0f4648/src/app/api/users/check-admin/route.js
+// src/app/api/users/check-admin/route.js
 import { query } from '@/lib/db';
 
 export async function GET() {
@@ -11,7 +11,8 @@ export async function GET() {
     // データベース接続エラーやusersテーブルが存在しない場合のハンドリング
     // ここでテーブルが存在しないエラー (42P01) をキャッチし、adminExists: false として返す
     if (err.code === '42P01' || (err.message && err.message.includes('relation "users" does not exist'))) {
-      return Response.json({ adminExists: false, error: 'users テーブルが存在しません。' }, { status: 200 });
+      // users テーブルが存在しない場合
+      return Response.json({ adminExists: false, error: 'users テーブルが存在しません。初期セットアップが必要です。' }, { status: 200 }); // status 200 で正常な状態として返す
     }
     // その他のデータベース接続エラーなど
     let errorMessage = '管理者ユーザーの存在確認に失敗しました。';
@@ -23,7 +24,7 @@ export async function GET() {
       errorMessage = '指定されたデータベースが存在しません。';
     }
 
-    // 予期せぬエラーは500で返す
+    // 予期せぬエラーは500で返す（ただし、フロントエンドがこれをキャッチできるか確認が必要）
     return Response.json({ adminExists: false, error: errorMessage }, { status: 500 });
   }
 }
