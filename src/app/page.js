@@ -1,34 +1,26 @@
 // littlebuddha-dev/education/education-0c8aa7b4e15b5720ef44b74b6bbc36cb09462a21/src/app/page.js
 'use client'; // これを忘れずに！
 
-import { useEffect, useState } from 'react'; //
-import { useRouter } from 'next/navigation'; //
-import { jwtDecode } from 'jwt-decode'; // jwt-decode を直接インポート
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { getCookie } from '@/utils/authUtils'; // 新しいヘルパーからgetCookieをインポート
 
 export default function HomePage() {
-  const [loading, setLoading] = useState(true); //
-  const [dbError, setDbError] = useState(false); //
-  const router = useRouter(); //
-
-  // Cookieからトークンを取得するヘルパー関数
-  const getCookie = (name) => {
-    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)')); //
-    return match ? match[2] : null; //
-  };
+  const [loading, setLoading] = useState(true);
+  const [dbError, setDbError] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     async function checkSetupAndAuth() {
-      const token = getCookie('token'); //
-
       // まず、テーブルが存在するかどうかを確認
       let usersTableExists = false;
       let isDbConnected = false;
       try {
-        const tableCheckRes = await fetch('/api/tables'); //
-        const data = await tableCheckRes.json(); //
-        isDbConnected = data.success; //
-        if (isDbConnected) { //
-          usersTableExists = data.tables.some(table => table.table_name === 'users'); //
+        const tableCheckRes = await fetch('/api/tables');
+        const data = await tableCheckRes.json();
+        isDbConnected = data.success;
+        if (isDbConnected) {
+          usersTableExists = data.tables.some(table => table.table_name === 'users');
         }
       } catch (err) {
         console.error('Failed to check table existence or DB connection:', err);
@@ -41,40 +33,22 @@ export default function HomePage() {
       if (!isDbConnected || !usersTableExists) {
         // DB接続ができていない、またはusersテーブルが存在しない場合、セットアップページへリダイレクト
         console.log('DB not connected or Users table not found. Redirecting to setup.');
-        router.replace('/setup'); //
+        router.replace('/setup');
         setLoading(false);
         return;
       }
 
-      // users テーブルが存在し、DB接続もOKの場合、認証状態を確認
+      const token = getCookie('token'); // Cookieからトークンを取得
       if (token) {
-        try {
-          const decoded = jwtDecode(token); //
-          console.log('User logged in:', decoded);
-
-          if (decoded.role === 'child') {
-            router.replace('/chat'); //
-          } else if (decoded.role === 'parent') {
-            router.replace('/children'); //
-          } else if (decoded.role === 'admin') {
-            router.replace('/admin/users'); //
-          }
-          setLoading(false); //
-          return; //
-        } catch (decodeError) {
-          console.error('Token decode error in HomePage:', decodeError);
-          document.cookie = 'token=; Max-Age=0; path=/;'; // 無効なトークンは削除
-          // トークンが無効なら、ログインページへ進む
-          router.replace('/login'); //
-          setLoading(false); //
-          return; //
-        }
+        // トークンがあれば、useAuthGuardがリダイレクトを処理するため、ここでは何もしない
+        // loading状態を解除して、useAuthGuardのリダイレクトを待つ
+        setLoading(false);
+      } else {
+        // トークンがなく、セットアップも完了している場合、ログインページへリダイレクト
+        console.log('No token and users table exists. Redirecting to login.');
+        router.replace('/login');
+        setLoading(false);
       }
-
-      // トークンがなく、users テーブルが存在し、DB接続もOKの場合、ログインページへリダイレクト
-      console.log('No token and users table exists. Redirecting to login.');
-      router.replace('/login'); //
-      setLoading(false); //
     }
 
     checkSetupAndAuth();
