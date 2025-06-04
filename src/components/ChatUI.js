@@ -1,8 +1,9 @@
-// littlebuddha-dev/education/education-main/src/components/ChatUI.js
+// littlebuddha-dev/education/education-af9f7cc579e22203496449ba55f5ee95bf0f4648/src/components/ChatUI.js
 'use client';
 
 import { useEffect, useState } from 'react';
 import { jwtDecode } from 'jwt-decode';
+import { getCookie } from '@/utils/authUtils';
 
 // ✅ props に childId を追加
 export default function ChatUI({ childId }) {
@@ -27,7 +28,7 @@ export default function ChatUI({ childId }) {
       alert('ログイン情報がありません。ログインしてください。');
       return;
     }
-    
+
     // ✅ childId が選択されていない場合は警告
     if (!childId) {
       alert('チャットする子どもを選択してください。');
@@ -62,7 +63,7 @@ export default function ChatUI({ childId }) {
       ]);
     }
   };
-  
+
   return (
     <div>
       <div style={{ padding: '1rem', border: '1px solid #ccc', height: '400px', overflowY: 'auto' }}>
@@ -90,8 +91,8 @@ export default function ChatUI({ childId }) {
   );
 }
 
-// ✅ Cookie から値を取り出す関数
-function getCookie(name) {
-  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-  return match ? match[2] : null;
-}
+// ❌ 削除: Cookie から値を取り出す関数 (ChatUI からコピー)
+// function getCookie(name) {
+//   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+//   return match ? match[2] : null;
+// }
