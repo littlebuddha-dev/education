@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { jwtDecode } from 'jwt-decode';
+import { getCookie } from '@/utils/authUtils';
 
 export function useAuth() {
   const [user, setUser] = useState(null);
