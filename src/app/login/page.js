@@ -1,13 +1,15 @@
-// littlebuddha-dev/education/education-main/src/app/login/page.js
+// littlebuddha-dev/education/education-af9f7cc579e22203496449ba55f5ee95bf0f4648/src/app/login/page.js
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
+import { setAuthCookie } from '@/utils/authUtils'; // 新しいヘルパーからsetAuthCookieをインポート
+import { jwtDecode } from 'jwt-decode'; // jwtDecode をインポート
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const redirectTo = searchParams.get('redirectTo') || '/'; // ここが重要！
+  const redirectTo = searchParams.get('redirectTo'); // ここはそのまま
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,9 +28,25 @@ export default function LoginPage() {
     const data = await res.json();
 
     if (res.ok) {
-      // ✅ Cookieへ保存 (Secure無し、SameSite=Lax)
-      document.cookie = `token=${data.token}; path=/; max-age=3600; SameSite=Lax`;
-      router.push(redirectTo); // redirectTo が優先され、なければ '/' にリダイレクト
+      setAuthCookie(data.token); // ✅ ヘルパー関数を使用
+
+      // ロールに基づいてリダイレクト先を決定
+      try {
+        const decoded = jwtDecode(data.token);
+        if (decoded.role === 'child') {
+          router.push(redirectTo || '/chat'); // 子どもはデフォルトでチャットページへ
+        } else if (decoded.role === 'parent') {
+          router.push(redirectTo || '/children'); // 親はデフォルトで子ども一覧ページへ
+        } else if (decoded.role === 'admin') {
+          router.push(redirectTo || '/admin/users'); // 管理者はデフォルトで管理者ユーザー一覧へ
+        } else {
+          router.push(redirectTo || '/'); // それ以外のロールやデフォルト
+        }
+      } catch (err) {
+        console.error('トークン解析エラーまたはリダイレクト失敗:', err);
+        router.push(redirectTo || '/'); // エラー時はとりあえずトップへ
+      }
+
     } else {
       setError(data.message || 'ログインに失敗しました');
     }
