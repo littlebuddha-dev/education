@@ -2,6 +2,7 @@
 'use client';
 
 import { useState } from 'react';
+import { getCookie } from '@/utils/authUtils';
 
 export default function SkillLogForm({ childId, onSuccess }) {
   const [domain, setDomain] = useState('');
