@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import { useRouter } from 'next/navigation';
+import { getCookie } from '@/utils/authUtils';
 
 export default function ChildRegisterPage() {
   const [firstName, setFirstName] = useState('');
