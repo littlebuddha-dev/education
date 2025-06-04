@@ -12,82 +12,99 @@ export default function SetupPage() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isDbConnected, setIsDbConnected] = useState(false);
-  const [needsSetup, setNeedsSetup] = useState(false); // セットアップが必要かどうか
+  const [isDbConnected, setIsDbConnected] = useState(false); // DB接続状態
+  const [needsTableSetup, setNeedsTableSetup] = useState(false); // テーブル作成が必要か
+  const [needsAdminSetup, setNeedsAdminSetup] = useState(false); // 管理者ユーザー作成が必要か
   const router = useRouter();
 
-  // ページロード時にセットアップ状況をチェックする
   useEffect(() => {
-    // ✅ 追加: セットアップページにアクセスしたら既存の認証クッキーを削除
     console.log('🧹 SetupPage: 既存の認証クッキーを削除します。');
-    removeAuthCookie(); // removeAuthCookie 関数を呼び出す
+    removeAuthCookie();
 
     async function checkSetupStatus() {
       setIsLoading(true);
       setError('');
       setMessage('');
+      setIsDbConnected(false);
+      setNeedsTableSetup(false);
+      setNeedsAdminSetup(false);
 
       try {
-        const res = await fetch('/api/tables'); // データベース接続とテーブルリストを取得
-        const data = await res.json();
+        const tableCheckRes = await fetch('/api/tables');
+        const data = await tableCheckRes.json();
 
-        if (!data.success) { // DB接続エラーの場合
+        if (!tableCheckRes.ok || !data.success) {
+          // DB接続ができない、またはテーブルリスト取得APIがエラーを返した場合
+          console.error('Setup status check: DB connection or table check failed.', data.error);
           setIsDbConnected(false);
-          setError(data.error || 'データベース接続に失敗しました。');
-          setNeedsSetup(true); // DB接続自体ができていないので、セットアップが必要と判断
+          setError(data.error || 'データベース接続に失敗しました。PostgreSQLが起動しているか、.env.localの設定を確認してください。');
+          setNeedsTableSetup(true); // DB接続自体ができていないので、テーブルも管理者も未セットアップと判断
+          setNeedsAdminSetup(true);
           return;
         }
 
+        // DB接続成功
         setIsDbConnected(true);
         const tables = data.tables.map(row => row.table_name);
         const usersTableFound = tables.includes('users');
 
         if (!usersTableFound) {
-          // users テーブルが存在しない場合、セットアップが必要
-          setNeedsSetup(true);
+          // users テーブルが存在しない場合
+          console.log('Setup status check: Users table not found.');
+          setNeedsTableSetup(true);
+          setNeedsAdminSetup(true); // テーブルがないので管理者もいない
           setMessage('データベーステーブルが未作成です。システムを初期セットアップしてください。');
         } else {
-          // users テーブルが存在する場合、管理者ユーザーの存在を認証不要なAPIで確認
+          // users テーブルは存在するが、管理者ユーザーの存在を確認
           let adminUserFound = false;
           try {
-            // ✅ 変更: /api/admin/users ではなく /api/users/check-admin を使用
             const adminCheckRes = await fetch('/api/users/check-admin');
             const adminCheckData = await adminCheckRes.json();
 
             if (adminCheckRes.ok) {
               adminUserFound = adminCheckData.adminExists;
             } else {
+              // check-admin API自体がエラーを返した場合
+              console.error('Setup status check: Admin check API returned error:', adminCheckData.error);
               setError(adminCheckData.error || '管理者ユーザーの存在確認中に予期せぬエラーが発生しました。');
-              setNeedsSetup(true); // エラーが発生した場合はセットアップが必要と判断
+              setNeedsAdminSetup(true); // APIエラーの場合は管理者ユーザー作成が必要と判断
               return;
             }
           } catch (adminCheckError) {
-            console.error('Failed to check admin user existence:', adminCheckError);
-            setError('管理者ユーザーの存在確認に失敗しました。');
-            setNeedsSetup(true); // エラーが発生した場合はセットアップが必要と判断
+            // check-admin APIへのリクエストが失敗した場合
+            console.error('Setup status check: Failed to fetch admin user existence:', adminCheckError);
+            setError('管理者ユーザーの存在確認に失敗しました。サーバーが応答しているか確認してください。');
+            setNeedsAdminSetup(true); // エラー時も管理者ユーザー作成が必要と判断
             return;
           }
 
           if (!adminUserFound) {
             // users テーブルは存在するが、管理者ユーザーがまだ登録されていない場合
-            setNeedsSetup(true);
+            console.log('Setup status check: Admin user not found.');
+            setNeedsAdminSetup(true);
             setMessage('データベースは存在しますが、管理者ユーザーが未作成のようです。管理者ユーザーを作成してください。');
           } else {
-            // users テーブルも管理者ユーザーも存在する場合、セットアップは完了済み
-            setNeedsSetup(false);
+            // 全てセットアップ済み
+            console.log('Setup status check: System already set up. Redirecting to login.');
+            setMessage('システムは既にセットアップ済みです。ログインページへ移動します。');
+            setTimeout(() => {
+              router.push('/login');
+            }, 2000);
           }
         }
       } catch (err) {
-        console.warn('Setup status check failed:', err);
+        // fetch('/api/tables') 自体が失敗した場合（ネットワーク問題など）
+        console.error('Setup status check: Critical network or server error:', err);
         setIsDbConnected(false);
-        setError('データベースに接続できません。PostgreSQLが起動しているか、.env.localの設定を確認してください。');
-        setNeedsSetup(true); // エラー時もセットアップが必要と判断
+        setError('システム状態の確認中にネットワークエラーが発生しました。サーバーが起動しているか確認してください。');
+        setNeedsTableSetup(true); // 最も低い状態にリセット
+        setNeedsAdminSetup(true);
       } finally {
         setIsLoading(false);
       }
     }
     checkSetupStatus();
-  }, [router]); // pathnameとrouterを依存関係に
+  }, [router]);
 
   const handleSetup = async (e) => {
     e.preventDefault();
@@ -129,20 +146,98 @@ export default function SetupPage() {
   if (isLoading) {
     return (
       <main style={{ padding: '2rem' }}>
-        <p>セットアップ状況を確認中...</p>
+        <p>システム初期セットアップ状況を確認中...</p>
       </main>
     );
   }
 
-  // データベースに接続できていない場合
+  // DB接続ができていない場合
   if (!isDbConnected) {
     return (
       <main style={{ padding: '2rem', maxWidth: '600px', margin: 'auto' }}>
         <h1>🔰 教育AIシステム 初期セットアップ</h1>
         <p style={{ color: 'red', fontWeight: 'bold' }}>
           ⚠️ データベースに接続できません。PostgreSQLが起動しているか、`.env.local` の設定を確認してください。<br/>
-          {error}
+          詳細: {error}
         </p>
+        <p style={{ marginTop: '2rem', fontSize: '0.9em', color: '#666' }}>
+          ※ `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` は `.env.local` で設定済みの値を使用します。<br/>
+          これらの値は、PostgreSQLサーバーが起動しており、対応するデータベースとユーザーが存在している必要があります。
+        </p>
+        <p style={{ marginTop: '1rem', fontSize: '0.9em', color: '#666' }}>
+          PostgreSQLが動作している場合は、以下のコマンドでデータベースとユーザーを作成してからアプリケーションを再起動してください。<br/>
+          <pre><code>
+            psql postgres<br/>
+            CREATE USER user WITH PASSWORD 'postgres';<br/>
+            CREATE DATABASE userdb OWNER user;<br/>
+            \q
+          </code></pre>
+          (.env.localで設定したPGUSERとPGDATABASEの値に合わせてください)
+        </p>
+      </main>
+    );
+  }
+
+  // DBには接続できたが、テーブルまたは管理者ユーザーのセットアップが必要な場合
+  if (needsTableSetup || needsAdminSetup) {
+    return (
+      <main style={{ padding: '2rem', maxWidth: '600px', margin: 'auto' }}>
+        <h1>🔰 教育AIシステム 初期セットアップ</h1>
+        <p>
+          {message || 'システムはまだセットアップされていません。以下のフォームで初期設定を行ってください。'}
+        </p>
+        <p style={{ color: 'red', fontWeight: 'bold' }}>
+          ⚠️ `SETUP_SECRET_KEY` は `.env.local` に設定した秘密鍵と同じ値を入力してください。
+        </p>
+
+        {error && <p style={{ color: 'red' }}>{error}</p>}
+        {message && <p style={{ color: 'green' }}>{message}</p>}
+
+        <form onSubmit={handleSetup} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+          <div>
+            <label htmlFor="adminEmail">管理者メールアドレス:</label>
+            <input
+              type="email"
+              id="adminEmail"
+              value={adminEmail}
+              onChange={(e) => setAdminEmail(e.target.value)}
+              placeholder="admin@example.com"
+              required
+              style={{ width: '100%', padding: '0.5rem', marginTop: '0.2rem' }}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="adminPassword">管理者パスワード:</label>
+            <input
+              type="password"
+              id="adminPassword"
+              value={adminPassword}
+              onChange={e => setAdminPassword(e.target.value)}
+              placeholder="強力なパスワード"
+              required
+              style={{ width: '100%', padding: '0.5rem', marginTop: '0.2rem' }}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="setupSecretKey">セットアップ秘密鍵 (`SETUP_SECRET_KEY`):</label>
+            <input
+              type="password"
+              id="setupSecretKey"
+              value={setupSecretKey}
+              onChange={e => setSetupSecretKey(e.target.value)}
+              placeholder=".env.local の秘密鍵"
+              required
+              style={{ width: '100%', padding: '0.5rem', marginTop: '0.2rem' }}
+            />
+          </div>
+
+          <button type="submit" style={{ padding: '0.8rem 1.5rem', backgroundColor: '#0070f3', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+            システムをセットアップ
+          </button>
+        </form>
+
         <p style={{ marginTop: '2rem', fontSize: '0.9em', color: '#666' }}>
           ※ `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` は `.env.local` で設定済みの値を使用します。<br/>
           これらの値は、PostgreSQLサーバーが起動しており、対応するデータベースとユーザーが存在している必要があります。
@@ -151,70 +246,8 @@ export default function SetupPage() {
     );
   }
 
-  // ここに到達する場合、needsSetup は true になっているはず
-  // つまり、データベースは接続可能だが、usersテーブルがないか、管理者ユーザーがいない状態
-  return (
-    <main style={{ padding: '2rem', maxWidth: '600px', margin: 'auto' }}>
-      <h1>🔰 教育AIシステム 初期セットアップ</h1>
-      <p>
-        {message || 'システムはまだセットアップされていません。以下のフォームで初期設定を行ってください。'}
-      </p>
-      <p style={{ color: 'red', fontWeight: 'bold' }}>
-        ⚠️ `SETUP_SECRET_KEY` は `.env.local` に設定した秘密鍵と同じ値を入力してください。
-      </p>
-
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {message && <p style={{ color: 'green' }}>{message}</p>}
-
-      <form onSubmit={handleSetup} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
-        <div>
-          <label htmlFor="adminEmail">管理者メールアドレス:</label>
-          <input
-            type="email"
-            id="adminEmail"
-            value={adminEmail}
-            onChange={(e) => setAdminEmail(e.target.value)}
-            placeholder="admin@example.com"
-            required
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.2rem' }}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="adminPassword">管理者パスワード:</label>
-          <input
-            type="password"
-            id="adminPassword"
-            value={adminPassword}
-            onChange={e => setAdminPassword(e.target.value)}
-            placeholder="強力なパスワード"
-            required
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.2rem' }}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="setupSecretKey">セットアップ秘密鍵 (`SETUP_SECRET_KEY`):</label>
-          <input
-            type="password"
-            id="setupSecretKey"
-            value={setupSecretKey}
-            onChange={e => setSetupSecretKey(e.target.value)}
-            placeholder=".env.local の秘密鍵"
-            required
-            style={{ width: '100%', padding: '0.5rem', marginTop: '0.2rem' }}
-          />
-        </div>
-
-        <button type="submit" style={{ padding: '0.8rem 1.5rem', backgroundColor: '#0070f3', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-          システムをセットアップ
-        </button>
-      </form>
-
-      <p style={{ marginTop: '2rem', fontSize: '0.9em', color: '#666' }}>
-        ※ `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE` は `.env.local` で設定済みの値を使用します。<br/>
-        これらの値は、PostgreSQLサーバーが起動しており、対応するデータベースとユーザーが存在している必要があります。
-      </p>
-    </main>
-  );
+  // ここに到達することは、isDbConnected, !needsTableSetup, !needsAdminSetup が全て真であり、
+  // すでに checkSetupStatus 関数内でログインページへのリダイレクトが走っているため、
+  // このコンポーネントが実際に描画されることは基本的にありません。
+  return null;
 }
