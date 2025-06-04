@@ -2,51 +2,33 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { jwtDecode } from 'jwt-decode';
 import { useRouter } from 'next/navigation';
-import { useAuthGuard } from '@/lib/useAuthGuard'; // useAuthGuard をインポート
-import { getCookie } from '@/utils/authUtils'; // getCookieをインポート
+import { useAuthGuard } from '@/lib/useAuthGuard';
+// import { getCookie } from '@/utils/authUtils'; // getCookie は不要に
 
 export default function AdminUsersPage() {
-  const ready = useAuthGuard(); // useAuthGuard を呼び出す
+  const { ready, userRole, tokenInfo, authToken } = useAuthGuard(); // ✅ authToken を取得
   const [users, setUsers] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
-  const [tokenInfo, setTokenInfo] = useState(null); // tokenInfo はNavbarの表示には必要だが、認証ロジックからは切り離す
   const router = useRouter();
 
   useEffect(() => {
-    if (!ready) {
-      // useAuthGuard が認証処理中の場合、何もしないで待機
+    // useAuthGuardがまだ処理中、または認証/ロールチェックが完了していない場合
+    if (!ready || userRole === null || !authToken) { // ✅ authToken もチェック
       return;
     }
 
-    const token = getCookie('token');
-    if (!token) {
-      // useAuthGuard がリダイレクトしなかった場合（稀なケース）、エラーメッセージを設定
-      setErrorMessage('ログイン情報がありません。');
+    // useAuthGuardによって管理者ロールであることが保証されているはずだが、念のため
+    if (userRole !== 'admin') {
+      // このケースは本来useAuthGuardがリダイレクトすべきだが、もしここに来たらエラー
+      setErrorMessage('⚠️ このページは管理者のみアクセス可能です。');
       return;
     }
 
-    let decoded;
-    try {
-      decoded = jwtDecode(token);
-      setTokenInfo(decoded); // デコードした情報を保存
-    } catch (err) {
-      console.error('トークン解析エラー:', err);
-      setErrorMessage('認証情報が不正です。');
-      // ここでリダイレクトはuseAuthGuardに任せる
-      return;
-    }
-
-    // ロールがadminでない場合、エラーメッセージを設定（リダイレクトはuseAuthGuardに任せる）
-    if (decoded.role !== 'admin') {
-      setErrorMessage('⚠️ このページは管理者のみアクセス可能です');
-      return;
-    }
-
-    // 管理者ロールの場合のみユーザーデータをフェッチ
+    // 管理者ロールであればデータフェッチ
+    // getCookieの呼び出しは不要、authTokenを直接使用
     fetch('/api/admin/users', {
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: { 'Authorization': `Bearer ${authToken}` } // ✅ authToken を使用
     })
       .then(async res => {
         if (!res.ok) {
@@ -60,16 +42,19 @@ export default function AdminUsersPage() {
         console.error('Fetch error:', err.message);
         setErrorMessage(err.message);
       });
-  }, [ready]); // ready が変更されたときに再実行
+  }, [ready, userRole, authToken]); // ✅ authToken を依存関係に追加
 
   const handleDelete = async (id) => {
     if (!confirm('このユーザーを本当に削除しますか？')) return;
 
-    const token = getCookie('token');
+    if (!authToken) { // ✅ authToken をチェック
+      alert('ログイン情報がありません。');
+      return;
+    }
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${authToken}` } // ✅ authToken を使用
       });
 
       const data = await res.json();
@@ -85,13 +70,28 @@ export default function AdminUsersPage() {
     }
   };
 
+  if (!ready) {
+    return (
+      <main style={{ padding: '2rem' }}>
+        <p>認証状態を確認中...</p>
+      </main>
+    );
+  }
+
+  // ready が true で、かつ管理者ロールでなければエラーメッセージを表示
+  // この分岐はuseAuthGuardが正しく機能していれば到達しないはずだが、念のため
+  if (userRole !== 'admin') {
+    return <main style={{ padding: '2rem' }}><p style={{ color: 'red' }}>{errorMessage || 'アクセス権限がありません。'}</p></main>;
+  }
+
+  // ここに到達した場合は、管理者として認証済み
   return (
     <main style={{ padding: '2rem' }}>
       <h1>ユーザー管理（管理者専用）</h1>
 
       {errorMessage && <p style={{ color: 'red' }}>{errorMessage}</p>}
 
-      {ready && !errorMessage && users.length > 0 && ( // ready が true になってから表示
+      {users.length > 0 ? (
         <table border="1" cellPadding="8" style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead>
             <tr>
@@ -106,7 +106,8 @@ export default function AdminUsersPage() {
           </thead>
           <tbody>
             {users.map(user => (
-              <tr key={user.id}><td>{user.last_name} {user.first_name}</td>
+              <tr key={user.id}>
+                <td>{user.last_name} {user.first_name}</td>
                 <td>{user.email}</td>
                 <td>{user.role === 'child' ? '子ども' : user.role === 'parent' ? '保護者' : '管理者'}</td>
                 <td>
@@ -159,10 +160,8 @@ export default function AdminUsersPage() {
             ))}
           </tbody>
         </table>
-      )}
-
-      {ready && !errorMessage && users.length === 0 && (
-        <p>ユーザーがまだ登録されていません。</p>
+      ) : (
+        !errorMessage && <p>ユーザーがまだ登録されていません。</p>
       )}
     </main>
   );
