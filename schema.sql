@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     first_name VARCHAR(255),
     last_name VARCHAR(255),
-    role VARCHAR(50) DEFAULT 'parent' NOT NULL, -- 'parent', 'admin', 'child' のいずれか
+    role VARCHAR(50) DEFAULT 'parent' NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
