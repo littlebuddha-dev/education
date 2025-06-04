@@ -4,6 +4,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { jwtDecode } from 'jwt-decode';
+import { getCookie } from '@/utils/authUtils';
 
 export default function Navbar() {
   const router = useRouter();
