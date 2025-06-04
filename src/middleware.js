@@ -13,7 +13,8 @@ const exemptPaths = [
   '/api/tables',
   '/api/users/check-admin',
   '/_next', // Next.jsの内部ファイル
-  '/static' // 静的ファイル
+  '/static', // 静的ファイルや静的アセット
+  '/_app' // Next.jsの内部アセット (version.json, immutable/nodesなど)
 ];
 
 export function middleware(request) {
@@ -24,7 +25,7 @@ export function middleware(request) {
 
   // 除外パスの確認
   if (exemptPaths.some(p => pathname.startsWith(p))) {
-    console.log(`Middleware: 除外パス: ${pathname}`);
+    console.log(`Middleware: 除外パス: ${pathname}, アクセス許可`);
     return NextResponse.next();
   }
 
@@ -80,6 +81,8 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - /static/ (your custom static assets)
+     * - /_app/ (Next.js internal files like version.json, immutable nodes)
      */
     '/((?!_next/static|_next/image|favicon.ico).*)',
   ]
