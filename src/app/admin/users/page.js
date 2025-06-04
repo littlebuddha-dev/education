@@ -1,33 +1,50 @@
-// src/app/admin/users/page.js
+// littlebuddha-dev/education/education-af9f7cc579e22203496449ba55f5ee95bf0f4648/src/app/admin/users/page.js
 'use client';
 
 import { useEffect, useState } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import { useRouter } from 'next/navigation';
-import { getCookie } from '@/utils/authUtils';
+import { useAuthGuard } from '@/lib/useAuthGuard'; // useAuthGuard をインポート
+import { getCookie } from '@/utils/authUtils'; // getCookieをインポート
 
 export default function AdminUsersPage() {
+  const ready = useAuthGuard(); // useAuthGuard を呼び出す
   const [users, setUsers] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
-  const [tokenInfo, setTokenInfo] = useState(null);
+  const [tokenInfo, setTokenInfo] = useState(null); // tokenInfo はNavbarの表示には必要だが、認証ロジックからは切り離す
   const router = useRouter();
 
   useEffect(() => {
-    // const token = localStorage.getItem('token'); // ❌ 変更
-    const token = getCookie('token'); // ✅ Cookieから取得
-    if (!token) {
-      router.push('/login');
+    if (!ready) {
+      // useAuthGuard が認証処理中の場合、何もしないで待機
       return;
     }
 
-    const decoded = jwtDecode(token);
-    setTokenInfo(decoded);
+    const token = getCookie('token');
+    if (!token) {
+      // useAuthGuard がリダイレクトしなかった場合（稀なケース）、エラーメッセージを設定
+      setErrorMessage('ログイン情報がありません。');
+      return;
+    }
 
+    let decoded;
+    try {
+      decoded = jwtDecode(token);
+      setTokenInfo(decoded); // デコードした情報を保存
+    } catch (err) {
+      console.error('トークン解析エラー:', err);
+      setErrorMessage('認証情報が不正です。');
+      // ここでリダイレクトはuseAuthGuardに任せる
+      return;
+    }
+
+    // ロールがadminでない場合、エラーメッセージを設定（リダイレクトはuseAuthGuardに任せる）
     if (decoded.role !== 'admin') {
       setErrorMessage('⚠️ このページは管理者のみアクセス可能です');
       return;
     }
 
+    // 管理者ロールの場合のみユーザーデータをフェッチ
     fetch('/api/admin/users', {
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -43,13 +60,12 @@ export default function AdminUsersPage() {
         console.error('Fetch error:', err.message);
         setErrorMessage(err.message);
       });
-  }, []);
+  }, [ready]); // ready が変更されたときに再実行
 
   const handleDelete = async (id) => {
     if (!confirm('このユーザーを本当に削除しますか？')) return;
 
-    // const token = localStorage.getItem('token'); // ❌ 変更
-    const token = getCookie('token'); // ✅ Cookieから取得
+    const token = getCookie('token');
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
         method: 'DELETE',
@@ -69,19 +85,13 @@ export default function AdminUsersPage() {
     }
   };
 
-  // ✅ Cookie から値を取り出す関数 (ChatUI からコピー)
-  function getCookie(name) {
-    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-    return match ? match[2] : null;
-  }
-
   return (
     <main style={{ padding: '2rem' }}>
       <h1>ユーザー管理（管理者専用）</h1>
 
       {errorMessage && <p style={{ color: 'red' }}>{errorMessage}</p>}
 
-      {users.length > 0 && (
+      {ready && !errorMessage && users.length > 0 && ( // ready が true になってから表示
         <table border="1" cellPadding="8" style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead>
             <tr>
@@ -113,7 +123,7 @@ export default function AdminUsersPage() {
                       ))
                     }
                     {/* 子どもが自分自身のアカウントの場合 */}
-                    {user.role === 'child' && user.children_count === 0 && user.id === user.children?.[0]?.id && (
+                    {user.role === 'child' && user.children_count === 0 && user.children?.[0]?.id && (
                         <div>
                             <a href={`/children/${user.children[0].id}`} style={{ color: '#0070f3', textDecoration: 'underline' }}>
                                 (自身)
@@ -148,11 +158,10 @@ export default function AdminUsersPage() {
               </tr>
             ))}
           </tbody>
-          
         </table>
       )}
 
-      {users.length === 0 && !errorMessage && (
+      {ready && !errorMessage && users.length === 0 && (
         <p>ユーザーがまだ登録されていません。</p>
       )}
     </main>
