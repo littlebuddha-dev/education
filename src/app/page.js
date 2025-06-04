@@ -1,9 +1,9 @@
 // littlebuddha-dev/education/education-0c8aa7b4e15b5720ef44b74b6bbc36cb09462a21/src/app/page.js
-'use client'; // これを忘れずに！
+'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { getCookie } from '@/utils/authUtils'; // 新しいヘルパーからgetCookieをインポート
+import { getCookie } from '@/utils/authUtils';
 
 export default function HomePage() {
   const [loading, setLoading] = useState(true);
@@ -11,45 +11,49 @@ export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    async function checkSetupAndAuth() {
-      // まず、テーブルが存在するかどうかを確認
+    const checkSetupAndAuth = async () => {
+      console.log('HomePage: checkSetupAndAuth 開始'); // 追加
+
       let usersTableExists = false;
       let isDbConnected = false;
       try {
+        console.log('HomePage: /api/tables をフェッチ中...'); // 追加
         const tableCheckRes = await fetch('/api/tables');
         const data = await tableCheckRes.json();
+        console.log('HomePage: /api/tables 応答:', data); // 追加
+
         isDbConnected = data.success;
         if (isDbConnected) {
           usersTableExists = data.tables.some(table => table.table_name === 'users');
+          console.log('HomePage: usersTableExists:', usersTableExists); // 追加
         }
       } catch (err) {
-        console.error('Failed to check table existence or DB connection:', err);
+        console.error('HomePage: DB接続またはテーブルチェック失敗:', err); // 追加
         setDbError(true);
         setLoading(false);
-        router.replace('/setup'); // DB接続エラーの場合は、セットアップページへ誘導
+        router.replace('/setup');
         return;
       }
 
       if (!isDbConnected || !usersTableExists) {
-        // DB接続ができていない、またはusersテーブルが存在しない場合、セットアップページへリダイレクト
-        console.log('DB not connected or Users table not found. Redirecting to setup.');
+        console.log('HomePage: DB接続なし、またはUsersテーブルが見つかりません。/setup にリダイレクトします。'); // 追加
         router.replace('/setup');
         setLoading(false);
         return;
       }
 
-      const token = getCookie('token'); // Cookieからトークンを取得
+      const token = getCookie('token');
+      console.log('HomePage: トークン確認 (getCookie):', token ? '有り' : '無し'); // 追加
+
       if (token) {
-        // トークンがあれば、useAuthGuardがリダイレクトを処理するため、ここでは何もしない
-        // loading状態を解除して、useAuthGuardのリダイレクトを待つ
+        console.log('HomePage: トークン有り。認証フローを続行します。'); // 追加
         setLoading(false);
       } else {
-        // トークンがなく、セットアップも完了している場合、ログインページへリダイレクト
-        console.log('No token and users table exists. Redirecting to login.');
+        console.log('HomePage: トークンなし、/login にリダイレクトします。'); // 追加
         router.replace('/login');
         setLoading(false);
       }
-    }
+    };
 
     checkSetupAndAuth();
   }, [router]);
@@ -72,7 +76,6 @@ export default function HomePage() {
     );
   }
 
-  // トークンがなければ、ログインを促すコンテンツを表示
   return (
     <main style={{ padding: "2rem" }}>
       <h1>教育AIシステムへようこそ！</h1>
