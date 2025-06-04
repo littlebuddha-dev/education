@@ -13,10 +13,17 @@ export default function ChatPage() {
   const [error, setError] = useState('');
   const [userRole, setUserRole] = useState(null); // ✅ 追加: ユーザーロール
 
+  // Cookieからトークンを取得するヘルパー関数 (このファイルにも追加)
+  const getCookie = (name) => {
+    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+    return match ? match[2] : null;
+  };
+
   useEffect(() => {
     if (!ready) return;
 
-    const token = localStorage.getItem('token');
+    // const token = localStorage.getItem('token'); // ❌ 変更
+    const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) {
       setError('ログイン情報がありません。');
       return;
