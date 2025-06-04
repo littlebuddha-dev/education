@@ -1,60 +1,69 @@
-// littlebuddha-dev/education/education-af9f7cc579e22203496449ba55f5ee95bf0f4648/src/app/admin/users/page.js
+// src/app/admin/users/page.js
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthGuard } from '@/lib/useAuthGuard';
-// import { getCookie } from '@/utils/authUtils'; // getCookie は不要に
 
 export default function AdminUsersPage() {
-  const { ready, userRole, tokenInfo, authToken } = useAuthGuard(); // ✅ authToken を取得
+  const { ready, userRole, tokenInfo, authToken } = useAuthGuard();
   const [users, setUsers] = useState([]);
   const [errorMessage, setErrorMessage] = useState('');
   const router = useRouter();
 
+  console.log('📋 AdminUsersPage: レンダリング', { ready, userRole, hasAuthToken: !!authToken });
+
   useEffect(() => {
+    console.log('📋 AdminUsersPage: useEffect開始', { ready, userRole, authToken: !!authToken });
+
     // useAuthGuardがまだ処理中、または認証/ロールチェックが完了していない場合
-    if (!ready || userRole === null || !authToken) { // ✅ authToken もチェック
+    if (!ready || userRole === null || !authToken) {
+      console.log('📋 AdminUsersPage: 認証待ち中', { ready, userRole, hasAuthToken: !!authToken });
       return;
     }
 
     // useAuthGuardによって管理者ロールであることが保証されているはずだが、念のため
     if (userRole !== 'admin') {
-      // このケースは本来useAuthGuardがリダイレクトすべきだが、もしここに来たらエラー
+      console.log('📋 AdminUsersPage: 管理者ロールではない', { userRole });
       setErrorMessage('⚠️ このページは管理者のみアクセス可能です。');
       return;
     }
 
+    console.log('📋 AdminUsersPage: データフェッチ開始');
+
     // 管理者ロールであればデータフェッチ
-    // getCookieの呼び出しは不要、authTokenを直接使用
     fetch('/api/admin/users', {
-      headers: { 'Authorization': `Bearer ${authToken}` } // ✅ authToken を使用
+      headers: { 'Authorization': `Bearer ${authToken}` }
     })
       .then(async res => {
+        console.log('📋 AdminUsersPage: API応答', { status: res.status, ok: res.ok });
         if (!res.ok) {
           const err = await res.json();
           throw new Error(err.error || '取得エラー');
         }
         return res.json();
       })
-      .then(setUsers)
+      .then(data => {
+        console.log('📋 AdminUsersPage: データ取得成功', { userCount: data.length });
+        setUsers(data);
+      })
       .catch(err => {
-        console.error('Fetch error:', err.message);
+        console.error('📋 AdminUsersPage: フェッチエラー:', err.message);
         setErrorMessage(err.message);
       });
-  }, [ready, userRole, authToken]); // ✅ authToken を依存関係に追加
+  }, [ready, userRole, authToken]);
 
   const handleDelete = async (id) => {
     if (!confirm('このユーザーを本当に削除しますか？')) return;
 
-    if (!authToken) { // ✅ authToken をチェック
+    if (!authToken) {
       alert('ログイン情報がありません。');
       return;
     }
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${authToken}` } // ✅ authToken を使用
+        headers: { 'Authorization': `Bearer ${authToken}` }
       });
 
       const data = await res.json();
@@ -70,21 +79,41 @@ export default function AdminUsersPage() {
     }
   };
 
+  console.log('📋 AdminUsersPage: レンダリング判定', { 
+    ready, 
+    userRole, 
+    showLoading: !ready,
+    showError: ready && userRole !== 'admin',
+    showContent: ready && userRole === 'admin'
+  });
+
   if (!ready) {
+    console.log('📋 AdminUsersPage: ローディング表示');
     return (
       <main style={{ padding: '2rem' }}>
         <p>認証状態を確認中...</p>
+        <div style={{ fontSize: '0.8em', color: '#666', marginTop: '1rem' }}>
+          デバッグ: ready={String(ready)}, userRole={userRole}, hasToken={String(!!authToken)}
+        </div>
       </main>
     );
   }
 
   // ready が true で、かつ管理者ロールでなければエラーメッセージを表示
-  // この分岐はuseAuthGuardが正しく機能していれば到達しないはずだが、念のため
   if (userRole !== 'admin') {
-    return <main style={{ padding: '2rem' }}><p style={{ color: 'red' }}>{errorMessage || 'アクセス権限がありません。'}</p></main>;
+    console.log('📋 AdminUsersPage: 権限エラー表示');
+    return (
+      <main style={{ padding: '2rem' }}>
+        <p style={{ color: 'red' }}>{errorMessage || 'アクセス権限がありません。'}</p>
+        <div style={{ fontSize: '0.8em', color: '#666', marginTop: '1rem' }}>
+          デバッグ: userRole={userRole}, tokenInfo={JSON.stringify(tokenInfo)}
+        </div>
+      </main>
+    );
   }
 
   // ここに到達した場合は、管理者として認証済み
+  console.log('📋 AdminUsersPage: メインコンテンツ表示');
   return (
     <main style={{ padding: '2rem' }}>
       <h1>ユーザー管理（管理者専用）</h1>
@@ -116,14 +145,12 @@ export default function AdminUsersPage() {
                     {user.children?.length > 0 &&
                       user.children.map(child => (
                         <div key={child.id}>
-                          {/* children.id で直接詳細ページへリンク */}
                           <a href={`/children/${child.id}`} style={{ color: '#0070f3', textDecoration: 'underline' }}>
                             {child.name}
                           </a>
                         </div>
                       ))
                     }
-                    {/* 子どもが自分自身のアカウントの場合 */}
                     {user.role === 'child' && user.children_count === 0 && user.children?.[0]?.id && (
                         <div>
                             <a href={`/children/${user.children[0].id}`} style={{ color: '#0070f3', textDecoration: 'underline' }}>
@@ -134,9 +161,7 @@ export default function AdminUsersPage() {
                   </div>
                 </td>
                 <td>{new Date(user.created_at).toLocaleDateString()}</td>
-
                 <td style={{ fontSize: '0.8em', color: '#888' }}>{user.id}</td>
-
                 <td>
                   <button
                     onClick={() => handleDelete(user.id)}
@@ -145,8 +170,6 @@ export default function AdminUsersPage() {
                   >
                     削除
                   </button>
-
-                  {/* ロールが 'parent' または 'child' の場合のみスキル統計リンク */}
                   {(user.role === 'parent' || user.role === 'child') && (
                     <a
                       href={`/admin/users/${user.id}/skills`}
@@ -163,6 +186,22 @@ export default function AdminUsersPage() {
       ) : (
         !errorMessage && <p>ユーザーがまだ登録されていません。</p>
       )}
+
+      <div style={{ 
+        marginTop: '2rem', 
+        fontSize: '0.8em', 
+        color: '#666',
+        backgroundColor: '#f5f5f5',
+        padding: '1rem',
+        borderRadius: '4px'
+      }}>
+        <strong>デバッグ情報:</strong>
+        <br />Ready: {String(ready)}
+        <br />UserRole: {userRole}
+        <br />HasAuthToken: {String(!!authToken)}
+        <br />UsersCount: {users.length}
+        <br />TokenInfo: {JSON.stringify(tokenInfo, null, 2)}
+      </div>
     </main>
   );
 }
