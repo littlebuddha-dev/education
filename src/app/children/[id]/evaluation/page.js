@@ -2,8 +2,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation'; // ✅ useRouter を追加
-import { jwtDecode } from 'jwt-decode'; // ✅ jwtDecode を追加
+import { useParams, useRouter } from 'next/navigation';
+import { jwtDecode } from 'jwt-decode';
+import { getCookie } from '@/utils/authUtils';
 
 export default function ChildEvaluationPage() {
   const { id: childId } = useParams(); // 子どもIDを取得
