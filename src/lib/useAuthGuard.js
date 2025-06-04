@@ -20,10 +20,27 @@ export function useAuthGuard() {
     const token = getCookie('token');
     console.log('🔐 useAuthGuard: トークン確認', { hasToken: !!token, tokenLength: token?.length });
 
+    // ログイン不要なパス (middleware.jsと同期)
+    const publicPaths = [
+      '/login',
+      '/users/register',
+      '/setup',
+      '/', // トップページは認証有無で挙動が変わるため特別扱い
+    ];
+
     if (!token) {
-      console.log('🔐 useAuthGuard: トークンなし → ログインページへリダイレクト');
-      const redirectTo = encodeURIComponent(pathname);
-      router.replace(`/login?redirectTo=${redirectTo}`);
+      // トークンがなく、パブリックパスでもない場合、ログインページへリダイレクト
+      if (!publicPaths.includes(pathname) && !pathname.startsWith('/api')) { // APIルートはミドルウェアで処理
+        console.log('🔐 useAuthGuard: トークンなし、保護されたページ → ログインページへリダイレクト');
+        const redirectTo = encodeURIComponent(pathname);
+        router.replace(`/login?redirectTo=${redirectTo}`);
+        return;
+      }
+      // パブリックパスの場合は、認証情報がないことを示す状態を設定して終了
+      setReady(true);
+      setUserRole(null);
+      setTokenInfo(null);
+      setAuthToken(null);
       return;
     }
 
@@ -56,43 +73,39 @@ export function useAuthGuard() {
     let redirectPath = null;
     let reason = '';
 
-    if (pathname.startsWith('/admin')) {
+    // 認証済みユーザーが認証関連ページにアクセスした場合
+    if (publicPaths.includes(pathname)) {
+      shouldRedirect = true;
+      reason = '認証済みユーザーが認証関連ページにアクセス';
+      if (decoded.role === 'child') {
+        redirectPath = '/chat';
+      } else if (decoded.role === 'parent') {
+        redirectPath = '/children';
+      } else if (decoded.role === 'admin') {
+        redirectPath = '/admin/users';
+      } else {
+        redirectPath = '/'; // 未定義ロールはトップへ
+      }
+    } else if (pathname.startsWith('/admin')) {
       if (decoded.role !== 'admin') {
         shouldRedirect = true;
-        redirectPath = '/login';
+        redirectPath = '/login'; // 管理者以外のアクセスはログインへ
         reason = '管理者ページに非管理者がアクセス';
       }
     } else if (pathname.startsWith('/children') || pathname.startsWith('/users')) {
-      if (decoded.role !== 'parent' && decoded.role !== 'admin') {
+      // /users は管理者専用のUsersPageもあるが、今回は親も利用できる
+      // child ロールも自分の /children/[id]/page.js や /children/[id]/evaluation/page.js にアクセスできるため、
+      // ここでは parent と child と admin を許可する
+      if (decoded.role !== 'parent' && decoded.role !== 'admin' && decoded.role !== 'child') {
         shouldRedirect = true;
-        redirectPath = '/login';
-        reason = '保護者ページに権限なしユーザーがアクセス';
+        redirectPath = '/login'; // 保護者/子ども/管理者以外のアクセスはログインへ
+        reason = '保護者/子ども向けページに権限なしユーザーがアクセス';
       }
     } else if (pathname.startsWith('/chat')) {
       if (decoded.role !== 'child' && decoded.role !== 'parent' && decoded.role !== 'admin') {
         shouldRedirect = true;
-        redirectPath = '/login';
+        redirectPath = '/login'; // チャットページに権限なしユーザーがアクセス
         reason = 'チャットページに権限なしユーザーがアクセス';
-      }
-    } else if (pathname === '/') {
-      shouldRedirect = true;
-      reason = 'ホームページからロール別ページにリダイレクト';
-      if (decoded.role === 'child') {
-        redirectPath = '/chat';
-      } else if (decoded.role === 'parent') {
-        redirectPath = '/children';
-      } else if (decoded.role === 'admin') {
-        redirectPath = '/admin/users';
-      }
-    } else if (pathname.startsWith('/login') || pathname.startsWith('/users/register') || pathname.startsWith('/setup')) {
-      shouldRedirect = true;
-      reason = '認証済みユーザーが認証ページにアクセス';
-      if (decoded.role === 'child') {
-        redirectPath = '/chat';
-      } else if (decoded.role === 'parent') {
-        redirectPath = '/children';
-      } else if (decoded.role === 'admin') {
-        redirectPath = '/admin/users';
       }
     }
 
