@@ -1,11 +1,15 @@
+// src/app/api/users/login/route.js
 import { query } from '@/lib/db';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+// ⚠️ CRITICAL: auth.js と同じ値を使用
+const JWT_SECRET = process.env.JWT_SECRET || 'secret'; // ✅ デフォルト値を 'secret' に統一
 
 export async function POST(req) {
   try {
+    console.log('🔐 ログインAPI JWT_SECRET:', JWT_SECRET); // ✅ デバッグ追加
+    
     const { email, password } = await req.json();
 
     const result = await query(
@@ -33,9 +37,11 @@ export async function POST(req) {
         last_name: user.last_name,
         role: user.role,
       },
-      JWT_SECRET,
+      JWT_SECRET, // ✅ 統一されたJWT_SECRET使用
       { expiresIn: '7d' }
     );
+
+    console.log('🔐 トークン生成成功:', token.substring(0, 20) + '...'); // ✅ デバッグ追加
 
     return Response.json({ token });
   } catch (err) {
