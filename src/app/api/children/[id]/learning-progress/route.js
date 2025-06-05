@@ -10,7 +10,7 @@ export async function GET(req, { params }) {
 
     // 子どもが認証済みユーザーに紐づくか確認（保護者）
     const childCheck = await query(
-      `SELECT user_id FROM children WHERE id = $1`,
+      `SELECT user_id, child_user_id FROM children WHERE id = $1`, // ✅ child_user_id も取得
       [childId]
     );
 
@@ -18,10 +18,11 @@ export async function GET(req, { params }) {
       return Response.json({ error: '子どもが見つかりません' }, { status: 404 });
     }
 
-    const ownerUserId = childCheck.rows[0].user_id;
+    const foundChild = childCheck.rows[0]; // ✅ 変数名を変更
 
     // 自分自身の子どもの情報、または管理者のみアクセス許可
-    if (user.id !== ownerUserId && user.role !== 'admin') {
+    // ✅ 修正: user.id が child_user_id と一致する場合も許可
+    if (user.id !== foundChild.user_id && user.role !== 'admin' && user.id !== foundChild.child_user_id) {
       return Response.json({ error: '閲覧権限がありません' }, { status: 403 });
     }
 
