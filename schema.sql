@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
     first_name VARCHAR(255),
     last_name VARCHAR(255),
     role VARCHAR(50) DEFAULT 'parent' NOT NULL,
+    birthday DATE, -- 💡 追加: users テーブルに birthday カラム
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -21,7 +22,7 @@ CREATE TABLE IF NOT EXISTS children (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE SET NULL, -- ✅ 修正: NULL を許容する (保護者に紐付けられていない場合)
     name VARCHAR(255) NOT NULL,
-    birthday DATE,
+    birthday DATE, -- 💡 追加: children テーブルにも birthday カラムがあることを確認
     gender VARCHAR(50),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
