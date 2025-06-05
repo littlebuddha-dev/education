@@ -1,37 +1,39 @@
 // littlebuddha-dev/education/education-main/src/app/api/children/[id]/learning-progress/route.js
 import { query } from '@/lib/db';
-import { verifyTokenFromCookie } from '@/lib/auth'; // 修正: verifyTokenFromHeader を verifyTokenFromCookie に変更
+import { verifyTokenFromCookie } from '@/lib/auth';
 
 export async function GET(req, { params }) {
   const childId = params.id;
 
-  try {
-    const user = verifyTokenFromCookie(req); // 修正: verifyTokenFromHeader を verifyTokenFromCookie に変更
+  if (!childId || childId.toLowerCase() === 'undefined' || childId.trim() === '') {
+    console.warn(`GET /api/children/[id]/learning-progress: childId is missing, 'undefined', or empty. Received: ${childId}`);
+    return Response.json({ error: '子どもIDが指定されていません。' }, { status: 400 });
+  }
 
-    // 子どもが認証済みユーザーに紐づくか確認（保護者）
+  if (!/^[0-9a-fA-F-]{36}$/.test(childId)) {
+    console.warn(`GET /api/children/[id]/learning-progress: Invalid UUID format for childId: ${childId}`);
+    return Response.json({ error: '無効な子どもID形式です。' }, { status: 400 });
+  }
+
+  try {
+    const user = verifyTokenFromCookie(req);
+
     const childCheck = await query(
-      `SELECT user_id, child_user_id FROM children WHERE id = $1`, // ✅ child_user_id も取得
+      `SELECT user_id, child_user_id FROM children WHERE id = $1`,
       [childId]
     );
 
     if (childCheck.rows.length === 0) {
-      return Response.json({ error: '子どもが見つかりません' }, { status: 404 });
+      return Response.json({ error: '子どもが見つかりません。' }, { status: 404 });
     }
 
-    const foundChild = childCheck.rows[0]; // ✅ 変数名を変更
+    const foundChild = childCheck.rows[0];
 
-    // 自分自身の子どもの情報、または管理者のみアクセス許可
-    // ✅ 修正: user.id が child_user_id と一致する場合も許可
     if (user.id !== foundChild.user_id && user.role !== 'admin' && user.id !== foundChild.child_user_id) {
-      return Response.json({ error: '閲覧権限がありません' }, { status: 403 });
+      return Response.json({ error: '閲覧権限がありません。' }, { status: 403 });
     }
-
-    // UUID形式チェック
-    if (!/^[0-9a-fA-F-]{36}$/.test(childId)) {
-      return Response.json({ error: '無効な子どもID' }, { status: 400 });
-    }
-
-    // 子どもの学習進捗と学習目標情報をJOINして取得
+    
+    console.log(`Executing query for GET /api/children/${childId}/learning-progress`);
     const result = await query(`
       SELECT
         clp.id,
@@ -50,7 +52,10 @@ export async function GET(req, { params }) {
 
     return Response.json(result.rows);
   } catch (err) {
-    console.error('学習進捗取得エラー:', err);
-    return Response.json({ error: '学習進捗の取得に失敗しました' }, { status: 500 });
+    console.error(`学習進捗取得エラー (childId: ${childId}):`, err);
+    if (err.message && err.message.includes('invalid input syntax for type uuid')) {
+        return Response.json({ error: '不正なID形式でクエリが実行されようとしました。' }, { status: 400 });
+    }
+    return Response.json({ error: '学習進捗の取得に失敗しました。' }, { status: 500 });
   }
 }
