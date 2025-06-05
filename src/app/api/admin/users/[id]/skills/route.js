@@ -4,15 +4,20 @@ import { verifyTokenFromCookie } from '@/lib/auth'; // 修正: verifyTokenFromHe
 
 export async function GET(req, { params }) {
   try {
-    const user = verifyTokenFromCookie(req); // 修正: verifyTokenFromHeader を verifyTokenFromCookie に変更
+    const user = verifyTokenFromCookie(req);
     if (user.role !== 'admin') {
       return Response.json({ error: '管理者のみがアクセスできます' }, { status: 403 });
     }
 
     const targetUserId = params.id; // ここで params.id は、親のユーザーID、または独立した子どものユーザーIDになりうる
 
+    // デバッグログを追加
+    console.log('🐞 Debug: targetUserId for skills API:', targetUserId, 'Type:', typeof targetUserId); 
+
     // UUID検証（最低限）
     if (!/^[0-9a-fA-F-]{36}$/.test(targetUserId)) {
+      // デバッグログを追加
+      console.error('🐞 Debug: UUID check failed for:', targetUserId); 
       return Response.json({ error: '不正なユーザーID' }, { status: 400 });
     }
 
