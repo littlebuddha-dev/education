@@ -79,9 +79,9 @@ export default function AdminUsersPage() {
     }
   };
 
-  console.log('📋 AdminUsersPage: レンダリング判定', { 
-    ready, 
-    userRole, 
+  console.log('📋 AdminUsersPage: レンダリング判定', {
+    ready,
+    userRole,
     showLoading: !ready,
     showError: ready && userRole !== 'admin',
     showContent: ready && userRole === 'admin'
@@ -170,7 +170,7 @@ export default function AdminUsersPage() {
                   >
                     削除
                   </button>
-                  {(user.role === 'parent' || user.role === 'child') && (
+                  {userRole === 'admin' && ( {/* 💡 修正: 管理者のみに表示 */}
                     <a
                       href={`/admin/users/${user.id}/skills`}
                       style={{ backgroundColor: '#444', color: 'white', padding: '0.3rem 0.5rem', textDecoration: 'none' }}
@@ -187,9 +187,9 @@ export default function AdminUsersPage() {
         !errorMessage && <p>ユーザーがまだ登録されていません。</p>
       )}
 
-      <div style={{ 
-        marginTop: '2rem', 
-        fontSize: '0.8em', 
+      <div style={{
+        marginTop: '2rem',
+        fontSize: '0.8em',
         color: '#666',
         backgroundColor: '#f5f5f5',
         padding: '1rem',
