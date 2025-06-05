@@ -20,18 +20,20 @@ export default function ChildDetailPage() {
 
   console.log('🐞 ChildDetailPage: Render cycle - params:', params, 'childId:', childId);
 
+  // 最初の useEffect: childId の可用性と認証状態を確認し、readyToFetch を設定
   useEffect(() => {
-    console.log('🐞 ChildDetailPage: useEffect triggered - params:', params, 'childId:', childId);
+    console.log('🐞 ChildDetailPage: First useEffect triggered - params:', params, 'childId:', childId);
 
-    // Ensure childId is valid before proceeding with any logic that uses it
+    // childId が有効でない場合は、API フェッチの準備ができていない
     if (!childId) {
-        console.log('🐞 ChildDetailPage: childId is undefined/null in useEffect, not ready to fetch yet.');
-        setReadyToFetch(false); // Make sure it's false if childId is not ready
-        return; // Exit useEffect if childId is not available yet
+        console.log('🐞 ChildDetailPage: childId is undefined/null in first useEffect, not ready to fetch yet.');
+        setReadyToFetch(false); // childId が準備できていない場合はフラグを false に
+        return; // useEffect をここで終了
     }
 
-    // If childId is now defined, set readyToFetch to true and proceed
-    if (childId && !readyToFetch) { // Only set to true once
+    // childId が定義された場合、API フェッチの準備ができたとマーク
+    // (readyToFetch がまだ false の場合のみ更新して、無限ループを防ぐ)
+    if (childId && !readyToFetch) {
         setReadyToFetch(true);
         console.log('🐞 ChildDetailPage: childId is now defined, setting readyToFetch to true.');
     }
@@ -39,8 +41,7 @@ export default function ChildDetailPage() {
     const token = getCookie('token');
     if (!token) {
       setError('ログインしていません。');
-      // If token is missing, set readyToFetch to false as we can't proceed
-      setReadyToFetch(false);
+      setReadyToFetch(false); // トークンがない場合も準備はできていない
       return;
     }
 
@@ -51,27 +52,24 @@ export default function ChildDetailPage() {
     } catch (err) {
       setError('認証情報が不正です。再ログインしてください。');
       document.cookie = 'token=; Max-Age=0; path=/';
-      setReadyToFetch(false); // If token is invalid, also not ready
+      setReadyToFetch(false); // 無効なトークンも準備はできていない
       return;
     }
 
-    // All API calls that depend on childId should now be inside this block
-    // AND after readyToFetch is true.
-    // This useEffect will run again when readyToFetch changes to true.
-    // So the actual fetch logic will be inside the second useEffect block below.
+    // ここでは API コールは行わない。readyToFetch に依存する別の useEffect で行う。
+  }, [childId, readyToFetch]); // childId と readyToFetch を依存配列に追加
 
-  }, [childId, readyToFetch]); // Add readyToFetch to dependencies to trigger the second useEffect
-
-  // Separate useEffect for data fetching, dependent on readyToFetch and token
+  // 2つ目の useEffect: データフェッチロジック。readyToFetch が true になったときにのみ実行
   useEffect(() => {
-    if (!readyToFetch || !currentUserInfo) { // Wait for readyToFetch and user info
-      console.log('🐞 ChildDetailPage: Data fetch useEffect: Not ready to fetch or currentUserInfo missing.');
+    // readyToFetch が false、または currentUserInfo がまだない場合は何もしない
+    if (!readyToFetch || !currentUserInfo) {
+      console.log('🐞 ChildDetailPage: Second useEffect (Data fetch): Not ready to fetch or currentUserInfo missing.');
       return;
     }
-    console.log('🐞 ChildDetailPage: Data fetch useEffect: Ready to fetch!');
+    console.log('🐞 ChildDetailPage: Second useEffect (Data fetch): Ready to fetch!');
 
-    const token = getCookie('token'); // Re-get token for safety (though it should be in state/currentUserInfo already)
-    if (!token) { // Should not happen if currentUserInfo is present, but defensive check
+    const token = getCookie('token'); // 念のためトークンを再取得 (state にあるはずだが、防御的なチェック)
+    if (!token) {
       setError('ログイン情報がありません (再確認)。');
       return;
     }
@@ -106,11 +104,14 @@ export default function ChildDetailPage() {
         setError(err.message);
     });
 
+    // スキルと学習進捗のフェッチも、この条件ブロック内で呼び出す
     fetchSkills();
     fetchLearningProgress();
 
-  }, [readyToFetch, childId, currentUserInfo]); // Dependencies for this second useEffect
+  }, [readyToFetch, childId, currentUserInfo]); // readyToFetch, childId, currentUserInfo を依存配列に追加
 
+  // fetchSkills と fetchLearningProgress 関数は useEffect の外で定義するが、
+  // 呼び出しは上記の readyToFetch が true になる useEffect 内で行われる
   const fetchSkills = () => {
     const token = getCookie('token');
     if (!token) return;
@@ -157,6 +158,7 @@ export default function ChildDetailPage() {
       });
   };
 
+  // データの読み込み中表示。child, currentUserInfo, readyToFetch の全てが揃うまで表示する。
   if (error) return <main style={{ padding: '2rem' }}><p style={{ color: 'red' }}>{error}</p></main>;
   if (!child || !currentUserInfo || !readyToFetch) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>;
 
