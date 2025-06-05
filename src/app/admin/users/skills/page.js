@@ -13,7 +13,13 @@ export default function UserSkillsPage() {
   const [stats, setStats] = useState([]);
   const [error, setError] = useState('');
 
+  // Debug log for params outside useEffect (initial render)
+  console.log('🐞 AdminSkillsPage: Initial params:', params); // 💡 追加
+
   useEffect(() => {
+    // Debug log for params inside useEffect
+    console.log('🐞 AdminSkillsPage: useEffect params:', params); // 💡 追加
+
     const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) {
       router.push('/login');
@@ -28,16 +34,27 @@ export default function UserSkillsPage() {
       return;
     }
 
-    fetch(`/api/admin/users/${params.id}/skills`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(res => res.json())
-      .then(data => setStats(data))
-      .catch(err => {
-        console.error('Fetch error:', err.message);
-        setError('統計データの取得に失敗しました');
-      });
-  }, [params.id, router]);
+    // Only proceed if params.id is available
+    if (params.id) { // 💡 修正: params.id が undefined でないことを確認
+      fetch(`/api/admin/users/${params.id}/skills`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(async res => {
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || '取得エラー');
+          }
+          return res.json();
+        })
+        .then(data => setStats(data))
+        .catch(err => {
+          console.error('Fetch error:', err.message);
+          setError(err.message);
+        });
+    } else {
+      setError('ユーザーIDが見つかりませんでした。'); // 💡 エラーメッセージを追加
+    }
+  }, [params.id, router]); // params.id を依存配列に含める
 
   const groupByChild = stats.reduce((acc, row) => {
     acc[row.child_name] = acc[row.child_name] || [];
@@ -45,7 +62,6 @@ export default function UserSkillsPage() {
     return acc;
   }, {});
 
-  // getCookie 関数は authUtils.js からインポートされているため、ここでは不要です。
   function getCookie(name) {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
     return match ? match[2] : null;
@@ -53,7 +69,7 @@ export default function UserSkillsPage() {
 
   return (
     <main style={{ padding: '2rem' }}>
-      <h1>スキル統計（親ユーザー: {params.id}）</h1>
+      <h1>スキル統計（親ユーザー: {params.id || 'N/A'}）</h1> {/* 💡 params.id が undefined の場合の表示 */}
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
       {!error && Object.keys(groupByChild).length === 0 && (
@@ -78,7 +94,7 @@ export default function UserSkillsPage() {
                   <td>{log.domain}</td>
                   <td>{log.avg_score}</td>
                   <td>{log.entry_count}</td>
-                  <td>{new Date(log.last_recorded).toISOString().split('T')[0]}</td> {/* 💡 修正: YYYY-MM-DD 形式に統一 */}
+                  <td>{new Date(log.last_recorded).toISOString().split('T')[0]}</td>
                 </tr>
               ))}
             </tbody>
