@@ -9,35 +9,40 @@ import { getCookie } from '@/utils/authUtils';
 
 export default function ChildDetailPage() {
   const params = useParams();
-  const childId = params.id;
+  const childId = params.id; // Still get it here
 
   const [child, setChild] = useState(null);
   const [skillLogs, setSkillLogs] = useState([]);
   const [learningProgress, setLearningProgress] = useState([]);
   const [error, setError] = useState('');
-  const [currentUserInfo, setCurrentUserInfo] = useState(null); // ✅ 追加: ログインユーザーの情報を保持する状態
+  const [currentUserInfo, setCurrentUserInfo] = useState(null);
 
   useEffect(() => {
-    const token = getCookie('token'); // ✅ Cookieから取得
+    // Ensure childId is valid before proceeding
+    if (!childId) { // 💡 修正: childId が undefined や null の場合は何もしない
+        console.log('🐞 ChildDetailPage: childId is undefined, waiting for params to be ready.');
+        return;
+    }
+
+    const token = getCookie('token');
     if (!token) {
       setError('ログインしていません。');
       return;
     }
 
-    let decodedToken = null; // ✅ decodedTokenを定義
+    let decodedToken = null;
     try {
       decodedToken = jwtDecode(token);
-      setCurrentUserInfo(decodedToken); // ✅ ログインユーザーの情報を状態にセット
+      setCurrentUserInfo(decodedToken);
     } catch (err) {
       setError('認証情報が不正です。再ログインしてください。');
-      document.cookie = 'token=; Max-Age=0; path=/;'; // ✅ Cookie削除
-      return; // エラーなので処理を中断
+      document.cookie = 'token=; Max-Age=0; path=/';
+      return;
     }
 
 
     // 子ども情報を取得
-    // ここでは /api/children を利用し、idでフィルタリングしています。
-    fetch(`/api/children?id=${childId}`, {
+    fetch(`/api/children?id=${childId}`, { // childId now guaranteed to be defined
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -52,11 +57,7 @@ export default function ChildDetailPage() {
     .then(data => {
         const foundChild = data.find(c => c.id === childId);
         if (foundChild) {
-            // 権限チェック:
-            // 1. ログインユーザーが管理者
-            // 2. ログインユーザーがこの子どもの保護者 (user_id が一致)
-            // 3. ログインユーザーがこの子ども自身 (child_user_id が一致)
-            if (decodedToken.role === 'admin' || foundChild.user_id === decodedToken.id || foundChild.child_user_id === decodedToken.id) { // ✅ decodedToken を使用
+            if (decodedToken.role === 'admin' || foundChild.user_id === decodedToken.id || foundChild.child_user_id === decodedToken.id) {
                 setChild(foundChild);
             } else {
                 setError('この子どもの情報を閲覧する権限がありません。');
@@ -70,14 +71,16 @@ export default function ChildDetailPage() {
         setError(err.message);
     });
 
+    // These calls will now also wait for childId to be defined
     fetchSkills();
     fetchLearningProgress();
-  }, [childId]);
+  }, [childId]); // Keep childId as a dependency
 
   const fetchSkills = () => {
-    const token = getCookie('token'); // ✅ Cookieから取得
+    const token = getCookie('token');
     if (!token) return;
 
+    // fetch call inside fetchSkills will now use a defined childId
     fetch(`/api/children/${childId}/skills`, {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -98,9 +101,10 @@ export default function ChildDetailPage() {
   };
 
   const fetchLearningProgress = () => {
-    const token = getCookie('token'); // ✅ Cookieから取得
+    const token = getCookie('token');
     if (!token) return;
 
+    // fetch call inside fetchLearningProgress will now use a defined childId
     fetch(`/api/children/${childId}/learning-progress`, {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -120,14 +124,8 @@ export default function ChildDetailPage() {
       });
   };
 
-  // ✅ Cookie から値を取り出す関数 (ChatUI からコピー)
-  function getCookie(name) {
-    const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-    return match ? match[2] : null;
-  }
-
   if (error) return <main style={{ padding: '2rem' }}><p style={{ color: 'red' }}>{error}</p></main>;
-  if (!child || !currentUserInfo) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>; // ✅ currentUserInfo も待つ
+  if (!child || !currentUserInfo) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>;
 
   return (
     <main style={{ padding: '2rem' }}>
@@ -135,7 +133,6 @@ export default function ChildDetailPage() {
       <p>誕生日: {child.birthday}</p>
       <p>性別: {child.gender}</p>
 
-      {/* ... (スキルログと学習進捗の表示は変更なし) */}
       <h2 style={{ marginTop: '2rem' }}>スキルログ</h2>
       {skillLogs.length === 0 ? (
         <p>スキルログがまだ登録されていません。</p>
@@ -188,9 +185,7 @@ export default function ChildDetailPage() {
         </table>
       )}
 
-      {/* スキルログフォームは、ログインしているユーザーが親か、
-          または自身がチャットしている子どもの場合のみ表示 */}
-      {child && (currentUserInfo.role === 'parent' || (currentUserInfo.role === 'child' && child.child_user_id === currentUserInfo.id)) && ( // ✅ currentUserInfo を使用
+      {child && (currentUserInfo.role === 'parent' || (currentUserInfo.role === 'child' && child.child_user_id === currentUserInfo.id)) && (
         <SkillLogForm childId={childId} onSuccess={fetchSkills} />
       )}
     </main>
