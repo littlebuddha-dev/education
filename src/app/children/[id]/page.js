@@ -9,24 +9,38 @@ import { getCookie } from '@/utils/authUtils';
 
 export default function ChildDetailPage() {
   const params = useParams();
-  const childId = params.id; // Still get it here
+  const childId = params.id; // Get childId from params
 
   const [child, setChild] = useState(null);
   const [skillLogs, setSkillLogs] = useState([]);
   const [learningProgress, setLearningProgress] = useState([]);
   const [error, setError] = useState('');
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
+  const [readyToFetch, setReadyToFetch] = useState(false); // 💡 新しい状態: フェッチ準備完了フラグ
+
+  console.log('🐞 ChildDetailPage: Render cycle - params:', params, 'childId:', childId);
 
   useEffect(() => {
-    // Ensure childId is valid before proceeding
-    if (!childId) { // 💡 修正: childId が undefined や null の場合は何もしない
-        console.log('🐞 ChildDetailPage: childId is undefined, waiting for params to be ready.');
-        return;
+    console.log('🐞 ChildDetailPage: useEffect triggered - params:', params, 'childId:', childId);
+
+    // Ensure childId is valid before proceeding with any logic that uses it
+    if (!childId) {
+        console.log('🐞 ChildDetailPage: childId is undefined/null in useEffect, not ready to fetch yet.');
+        setReadyToFetch(false); // Make sure it's false if childId is not ready
+        return; // Exit useEffect if childId is not available yet
+    }
+
+    // If childId is now defined, set readyToFetch to true and proceed
+    if (childId && !readyToFetch) { // Only set to true once
+        setReadyToFetch(true);
+        console.log('🐞 ChildDetailPage: childId is now defined, setting readyToFetch to true.');
     }
 
     const token = getCookie('token');
     if (!token) {
       setError('ログインしていません。');
+      // If token is missing, set readyToFetch to false as we can't proceed
+      setReadyToFetch(false);
       return;
     }
 
@@ -37,12 +51,33 @@ export default function ChildDetailPage() {
     } catch (err) {
       setError('認証情報が不正です。再ログインしてください。');
       document.cookie = 'token=; Max-Age=0; path=/';
+      setReadyToFetch(false); // If token is invalid, also not ready
       return;
     }
 
+    // All API calls that depend on childId should now be inside this block
+    // AND after readyToFetch is true.
+    // This useEffect will run again when readyToFetch changes to true.
+    // So the actual fetch logic will be inside the second useEffect block below.
+
+  }, [childId, readyToFetch]); // Add readyToFetch to dependencies to trigger the second useEffect
+
+  // Separate useEffect for data fetching, dependent on readyToFetch and token
+  useEffect(() => {
+    if (!readyToFetch || !currentUserInfo) { // Wait for readyToFetch and user info
+      console.log('🐞 ChildDetailPage: Data fetch useEffect: Not ready to fetch or currentUserInfo missing.');
+      return;
+    }
+    console.log('🐞 ChildDetailPage: Data fetch useEffect: Ready to fetch!');
+
+    const token = getCookie('token'); // Re-get token for safety (though it should be in state/currentUserInfo already)
+    if (!token) { // Should not happen if currentUserInfo is present, but defensive check
+      setError('ログイン情報がありません (再確認)。');
+      return;
+    }
 
     // 子ども情報を取得
-    fetch(`/api/children?id=${childId}`, { // childId now guaranteed to be defined
+    fetch(`/api/children?id=${childId}`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -57,7 +92,7 @@ export default function ChildDetailPage() {
     .then(data => {
         const foundChild = data.find(c => c.id === childId);
         if (foundChild) {
-            if (decodedToken.role === 'admin' || foundChild.user_id === decodedToken.id || foundChild.child_user_id === decodedToken.id) {
+            if (currentUserInfo.role === 'admin' || foundChild.user_id === currentUserInfo.id || foundChild.child_user_id === currentUserInfo.id) {
                 setChild(foundChild);
             } else {
                 setError('この子どもの情報を閲覧する権限がありません。');
@@ -71,16 +106,15 @@ export default function ChildDetailPage() {
         setError(err.message);
     });
 
-    // These calls will now also wait for childId to be defined
     fetchSkills();
     fetchLearningProgress();
-  }, [childId]); // Keep childId as a dependency
+
+  }, [readyToFetch, childId, currentUserInfo]); // Dependencies for this second useEffect
 
   const fetchSkills = () => {
     const token = getCookie('token');
     if (!token) return;
 
-    // fetch call inside fetchSkills will now use a defined childId
     fetch(`/api/children/${childId}/skills`, {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -104,7 +138,6 @@ export default function ChildDetailPage() {
     const token = getCookie('token');
     if (!token) return;
 
-    // fetch call inside fetchLearningProgress will now use a defined childId
     fetch(`/api/children/${childId}/learning-progress`, {
       headers: {
         'Authorization': `Bearer ${token}`
@@ -125,7 +158,7 @@ export default function ChildDetailPage() {
   };
 
   if (error) return <main style={{ padding: '2rem' }}><p style={{ color: 'red' }}>{error}</p></main>;
-  if (!child || !currentUserInfo) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>;
+  if (!child || !currentUserInfo || !readyToFetch) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>;
 
   return (
     <main style={{ padding: '2rem' }}>
