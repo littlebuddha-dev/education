@@ -10,11 +10,13 @@ export default function UserRegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('parent'); // ✅ 追加: role の状態と初期値
+  const [birthday, setBirthday] = useState(''); // ✅ 追加: birthday の状態
   const [error, setError] = useState(null);
   const router = useRouter();
 
   const handleRegister = async () => {
-    if (!email || !password || !firstName || !lastName) {
+    // 必須項目のチェックにbirthdayを追加
+    if (!email || !password || !firstName || !lastName || !birthday) { // 💡 修正: birthday を必須項目に追加
       setError('すべての項目を入力してください');
       return;
     }
@@ -24,7 +26,8 @@ export default function UserRegisterPage() {
       const res = await fetch('/api/users/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName, role }), // ✅ role を追加
+        // body に birthday を追加
+        body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName, role, birthday }), // 💡 修正: birthday を追加
       });
       const data = await res.json();
       if (data.error) {
@@ -86,6 +89,14 @@ export default function UserRegisterPage() {
         <label>
           パスワード：
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        </label>
+      </div>
+
+      {/* ✅ 生年月日の入力フィールドを追加 */}
+      <div style={{ marginBottom: '1rem' }}>
+        <label>
+          生年月日：
+          <input type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} required /> {/* 💡 追加 */}
         </label>
       </div>
 
