@@ -96,7 +96,7 @@ export default function Navbar() {
               {/* childProfileId が取得できたらそれを使用、なければ暫定的に chat へ */}
               {childProfileId ? (
                 <>
-                  <a href={`/children/${childProfileId}/page`}>学習状況</a> {/* ✅ children.id を使用 */}
+                  <a href={`/children/${childProfileId}`}>学習状況</a> {/* 💡 修正: /page を削除 */}
                   <a href={`/children/${childProfileId}/evaluation`}>スキル評価</a> {/* ✅ children.id を使用 */}
                 </>
               ) : (
