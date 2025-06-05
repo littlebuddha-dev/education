@@ -14,7 +14,6 @@ export default function UserSkillsPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // const token = localStorage.getItem('token'); // ❌ 変更
     const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) {
       router.push('/login');
@@ -46,7 +45,7 @@ export default function UserSkillsPage() {
     return acc;
   }, {});
 
-  // ✅ Cookie から値を取り出す関数 (ChatUI からコピー)
+  // getCookie 関数は authUtils.js からインポートされているため、ここでは不要です。
   function getCookie(name) {
     const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
     return match ? match[2] : null;
@@ -79,7 +78,7 @@ export default function UserSkillsPage() {
                   <td>{log.domain}</td>
                   <td>{log.avg_score}</td>
                   <td>{log.entry_count}</td>
-                  <td>{new Date(log.last_recorded).toLocaleDateString()}</td>
+                  <td>{new Date(log.last_recorded).toISOString().split('T')[0]}</td> {/* 💡 修正: YYYY-MM-DD 形式に統一 */}
                 </tr>
               ))}
             </tbody>
