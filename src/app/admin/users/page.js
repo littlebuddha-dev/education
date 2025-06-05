@@ -1,207 +1,198 @@
-// src/app/admin/users/page.js
+// src/app/children/[id]/page.js
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuthGuard } from '@/lib/useAuthGuard';
+import { useParams } from 'next/navigation';
+import SkillLogForm from '@/components/SkillLogForm';
+import { jwtDecode } from 'jwt-decode';
+import { getCookie } from '@/utils/authUtils'; // ✅ authUtils から getCookie をインポート
 
-export default function AdminUsersPage() {
-  const { ready, userRole, tokenInfo, authToken } = useAuthGuard();
-  const [users, setUsers] = useState([]);
-  const [errorMessage, setErrorMessage] = useState('');
-  const router = useRouter();
+export default function ChildDetailPage() {
+  const params = useParams();
+  const childId = params.id;
 
-  console.log('📋 AdminUsersPage: レンダリング', { ready, userRole, hasAuthToken: !!authToken });
+  const [child, setChild] = useState(null);
+  const [skillLogs, setSkillLogs] = useState([]);
+  const [learningProgress, setLearningProgress] = useState([]);
+  const [error, setError] = useState('');
+  const [currentUserInfo, setCurrentUserInfo] = useState(null); // ✅ 追加: ログインユーザーの情報を保持する状態
 
   useEffect(() => {
-    console.log('📋 AdminUsersPage: useEffect開始', { ready, userRole, authToken: !!authToken });
-
-    // useAuthGuardがまだ処理中、または認証/ロールチェックが完了していない場合
-    if (!ready || userRole === null || !authToken) {
-      console.log('📋 AdminUsersPage: 認証待ち中', { ready, userRole, hasAuthToken: !!authToken });
+    const token = getCookie('token'); // ✅ authUtils からインポートされた getCookie を使用
+    if (!token) {
+      setError('ログインしていません。');
       return;
     }
 
-    // useAuthGuardによって管理者ロールであることが保証されているはずだが、念のため
-    if (userRole !== 'admin') {
-      console.log('📋 AdminUsersPage: 管理者ロールではない', { userRole });
-      setErrorMessage('⚠️ このページは管理者のみアクセス可能です。');
-      return;
+    let decodedToken = null; // ✅ decodedTokenを定義
+    try {
+      decodedToken = jwtDecode(token);
+      setCurrentUserInfo(decodedToken); // ✅ ログインユーザーの情報を状態にセット
+    } catch (err) {
+      setError('認証情報が不正です。再ログインしてください。');
+      document.cookie = 'token=; Max-Age=0; path=/;'; // ✅ Cookie削除
+      return; // エラーなので処理を中断
     }
 
-    console.log('📋 AdminUsersPage: データフェッチ開始');
 
-    // 管理者ロールであればデータフェッチ
-    fetch('/api/admin/users', {
-      headers: { 'Authorization': `Bearer ${authToken}` }
+    // 子ども情報を取得
+    // ここでは /api/children を利用し、idでフィルタリングしています。
+    fetch(`/api/children?id=${childId}`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    .then(async res => {
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.error || '子ども情報の取得に失敗しました');
+        }
+        return res.json();
+    })
+    .then(data => {
+        const foundChild = data.find(c => c.id === childId);
+        if (foundChild) {
+            // 権限チェック:
+            // 1. ログインユーザーが管理者
+            // 2. ログインユーザーがこの子どもの保護者 (user_id が一致)
+            // 3. ログインユーザーがこの子ども自身 (child_user_id が一致)
+            if (decodedToken.role === 'admin' || foundChild.user_id === decodedToken.id || foundChild.child_user_id === decodedToken.id) { // ✅ decodedToken を使用
+                setChild(foundChild);
+            } else {
+                setError('この子どもの情報を閲覧する権限がありません。');
+            }
+        } else {
+            setError('子どもが見つかりませんでした。');
+        }
+    })
+    .catch(err => {
+        console.error('Fetch child error:', err.message);
+        setError(err.message);
+    });
+
+    fetchSkills();
+    fetchLearningProgress();
+  }, [childId]);
+
+  const fetchSkills = () => {
+    const token = getCookie('token'); // ✅ authUtils からインポートされた getCookie を使用
+    if (!token) return;
+
+    fetch(`/api/children/${childId}/skills`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
     })
       .then(async res => {
-        console.log('📋 AdminUsersPage: API応答', { status: res.status, ok: res.ok });
         if (!res.ok) {
           const err = await res.json();
-          throw new Error(err.error || '取得エラー');
+          throw new Error(err.error || 'スキルログの取得に失敗しました');
         }
         return res.json();
       })
-      .then(data => {
-        console.log('📋 AdminUsersPage: データ取得成功', { userCount: data.length });
-        setUsers(data);
-      })
+      .then(setSkillLogs)
       .catch(err => {
-        console.error('📋 AdminUsersPage: フェッチエラー:', err.message);
-        setErrorMessage(err.message);
+        console.error('Fetch skill logs error:', err.message);
+        setError(err.message);
       });
-  }, [ready, userRole, authToken]);
-
-  const handleDelete = async (id) => {
-    if (!confirm('このユーザーを本当に削除しますか？')) return;
-
-    if (!authToken) {
-      alert('ログイン情報がありません。');
-      return;
-    }
-    try {
-      const res = await fetch(`/api/admin/users/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${authToken}` }
-      });
-
-      const data = await res.json();
-
-      if (res.ok) {
-        setUsers(prev => prev.filter(user => user.id !== id));
-      } else {
-        alert(data.error || '削除に失敗しました');
-      }
-    } catch (err) {
-      console.error('削除エラー:', err.message);
-      alert('通信エラーが発生しました');
-    }
   };
 
-  console.log('📋 AdminUsersPage: レンダリング判定', {
-    ready,
-    userRole,
-    showLoading: !ready,
-    showError: ready && userRole !== 'admin',
-    showContent: ready && userRole === 'admin'
-  });
+  const fetchLearningProgress = () => {
+    const token = getCookie('token'); // ✅ authUtils からインポートされた getCookie を使用
+    if (!token) return;
 
-  if (!ready) {
-    console.log('📋 AdminUsersPage: ローディング表示');
-    return (
-      <main style={{ padding: '2rem' }}>
-        <p>認証状態を確認中...</p>
-        <div style={{ fontSize: '0.8em', color: '#666', marginTop: '1rem' }}>
-          デバッグ: ready={String(ready)}, userRole={userRole}, hasToken={String(!!authToken)}
-        </div>
-      </main>
-    );
-  }
+    fetch(`/api/children/${childId}/learning-progress`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+      .then(async res => {
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || '学習進捗の取得に失敗しました');
+        }
+        return res.json();
+      })
+      .then(setLearningProgress)
+      .catch(err => {
+        console.error('Fetch learning progress error:', err.message);
+        setError(err.message);
+      });
+  };
 
-  // ready が true で、かつ管理者ロールでなければエラーメッセージを表示
-  if (userRole !== 'admin') {
-    console.log('📋 AdminUsersPage: 権限エラー表示');
-    return (
-      <main style={{ padding: '2rem' }}>
-        <p style={{ color: 'red' }}>{errorMessage || 'アクセス権限がありません。'}</p>
-        <div style={{ fontSize: '0.8em', color: '#666', marginTop: '1rem' }}>
-          デバッグ: userRole={userRole}, tokenInfo={JSON.stringify(tokenInfo)}
-        </div>
-      </main>
-    );
-  }
+  // ❌ 削除: 重複する getCookie 関数
+  // function getCookie(name) {
+  //   const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  //   return match ? match[2] : null;
+  // }
 
-  // ここに到達した場合は、管理者として認証済み
-  console.log('📋 AdminUsersPage: メインコンテンツ表示');
+  if (error) return <main style={{ padding: '2rem' }}><p style={{ color: 'red' }}>{error}</p></main>;
+  if (!child || !currentUserInfo) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>;
+
   return (
     <main style={{ padding: '2rem' }}>
-      <h1>ユーザー管理（管理者専用）</h1>
+      <h1>{child.name} さんの学習履歴</h1>
+      <p>誕生日: {child.birthday}</p>
+      <p>性別: {child.gender}</p>
 
-      {errorMessage && <p style={{ color: 'red' }}>{errorMessage}</p>}
-
-      {users.length > 0 ? (
+      {/* ... (スキルログと学習進捗の表示は変更なし) */}
+      <h2 style={{ marginTop: '2rem' }}>スキルログ</h2>
+      {skillLogs.length === 0 ? (
+        <p>スキルログがまだ登録されていません。</p>
+      ) : (
         <table border="1" cellPadding="8" style={{ borderCollapse: 'collapse', width: '100%' }}>
           <thead>
             <tr>
-              <th>氏名</th>
-              <th>メールアドレス</th>
-              <th>ロール</th>
-              <th>子ども</th>
-              <th>作成日</th>
-              <th>ID</th>
-              <th>操作</th>
+              <th>分野</th>
+              <th>スコア</th>
+              <th>記録日時</th>
             </tr>
           </thead>
           <tbody>
-            {users.map(user => (
-              <tr key={user.id}>
-                <td>{user.last_name} {user.first_name}</td>
-                <td>{user.email}</td>
-                <td>{user.role === 'child' ? '子ども' : user.role === 'parent' ? '保護者' : '管理者'}</td>
-                <td>
-                  <div>{user.children_count}人</div>
-                  <div style={{ fontSize: '0.9em', color: '#555' }}>
-                    {user.children?.length > 0 &&
-                      user.children.map(child => (
-                        <div key={child.id}>
-                          <a href={`/children/${child.id}`} style={{ color: '#0070f3', textDecoration: 'underline' }}>
-                            {child.name}
-                          </a>
-                        </div>
-                      ))
-                    }
-                    {user.role === 'child' && user.children_count === 0 && user.children?.[0]?.id && (
-                        <div>
-                            <a href={`/children/${user.children[0].id}`} style={{ color: '#0070f3', textDecoration: 'underline' }}>
-                                (自身)
-                            </a>
-                        </div>
-                    )}
-                  </div>
-                </td>
-                <td>{new Date(user.created_at).toLocaleDateString()}</td>
-                <td style={{ fontSize: '0.8em', color: '#888' }}>{user.id}</td>
-                <td>
-                  <button
-                    onClick={() => handleDelete(user.id)}
-                    disabled={user.id === tokenInfo?.id}
-                    style={{ backgroundColor: 'red', color: 'white', padding: '0.3rem 0.5rem', marginRight: '0.5rem' }}
-                  >
-                    削除
-                  </button>
-                  {userRole === 'admin' && ( {/* 💡 修正: 管理者のみに表示 */}
-                    <a
-                      href={`/admin/users/${user.id}/skills`}
-                      style={{ backgroundColor: '#444', color: 'white', padding: '0.3rem 0.5rem', textDecoration: 'none' }}
-                    >
-                      統計を見る
-                    </a>
-                  )}
-                </td>
+            {skillLogs.map((log) => (
+              <tr key={log.id}>
+                <td>{log.domain}</td>
+                <td>{log.score}</td>
+                <td>{new Date(log.recorded_at).toLocaleString()}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      ) : (
-        !errorMessage && <p>ユーザーがまだ登録されていません。</p>
       )}
 
-      <div style={{
-        marginTop: '2rem',
-        fontSize: '0.8em',
-        color: '#666',
-        backgroundColor: '#f5f5f5',
-        padding: '1rem',
-        borderRadius: '4px'
-      }}>
-        <strong>デバッグ情報:</strong>
-        <br />Ready: {String(ready)}
-        <br />UserRole: {userRole}
-        <br />HasAuthToken: {String(!!authToken)}
-        <br />UsersCount: {users.length}
-        <br />TokenInfo: {JSON.stringify(tokenInfo, null, 2)}
-      </div>
+      <h2 style={{ marginTop: '2rem' }}>学習進捗</h2>
+      {learningProgress.length === 0 ? (
+        <p>学習目標がまだ設定されていないか、進捗データがありません。</p>
+      ) : (
+        <table border="1" cellPadding="8" style={{ borderCollapse: 'collapse', width: '100%' }}>
+          <thead>
+            <tr>
+              <th>目標名</th>
+              <th>教科</th>
+              <th>分野</th>
+              <th>ステータス</th>
+              <th>達成日</th>
+            </tr>
+          </thead>
+          <tbody>
+            {learningProgress.map((lp) => (
+              <tr key={lp.id}>
+                <td>{lp.goal_name}</td>
+                <td>{lp.subject}</td>
+                <td>{lp.domain}</td>
+                <td>{lp.status}</td>
+                <td>{lp.achieved_at ? new Date(lp.achieved_at).toLocaleDateString() : '未達成'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* スキルログフォームは、ログインしているユーザーが親か、
+          または自身がチャットしている子どもの場合のみ表示 */}
+      {child && (currentUserInfo.role === 'parent' || (currentUserInfo.role === 'child' && child.child_user_id === currentUserInfo.id)) && (
+        <SkillLogForm childId={childId} onSuccess={fetchSkills} />
+      )}
     </main>
   );
 }
