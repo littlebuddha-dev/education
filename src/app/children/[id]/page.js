@@ -2,46 +2,33 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation'; // 💡 useRouter をインポート
 import SkillLogForm from '@/components/SkillLogForm';
 import { jwtDecode } from 'jwt-decode';
-import { getCookie } from '@/utils/authUtils';
+import { getCookie, removeAuthCookie } from '@/utils/authUtils'; // 💡 removeAuthCookie をインポート
 
 export default function ChildDetailPage() {
   const params = useParams();
-  const childId = params.id; // Get childId from params
+  const childId = params ? params.id : undefined;
+  const router = useRouter(); // 💡 router を初期化
 
   const [child, setChild] = useState(null);
   const [skillLogs, setSkillLogs] = useState([]);
   const [learningProgress, setLearningProgress] = useState([]);
   const [error, setError] = useState('');
   const [currentUserInfo, setCurrentUserInfo] = useState(null);
-  const [readyToFetch, setReadyToFetch] = useState(false); // 💡 新しい状態: フェッチ準備完了フラグ
+  const [isReady, setIsReady] = useState(false); // ページがデータをフェッチする準備ができたか
 
   console.log('🐞 ChildDetailPage: Render cycle - params:', params, 'childId:', childId);
 
-  // 最初の useEffect: childId の可用性と認証状態を確認し、readyToFetch を設定
+  // 認証とパラメータの準備を確認するuseEffect
   useEffect(() => {
-    console.log('🐞 ChildDetailPage: First useEffect triggered - params:', params, 'childId:', childId);
-
-    // childId が有効でない場合は、API フェッチの準備ができていない
-    if (!childId) {
-        console.log('🐞 ChildDetailPage: childId is undefined/null in first useEffect, not ready to fetch yet.');
-        setReadyToFetch(false); // childId が準備できていない場合はフラグを false に
-        return; // useEffect をここで終了
-    }
-
-    // childId が定義された場合、API フェッチの準備ができたとマーク
-    // (readyToFetch がまだ false の場合のみ更新して、無限ループを防ぐ)
-    if (childId && !readyToFetch) {
-        setReadyToFetch(true);
-        console.log('🐞 ChildDetailPage: childId is now defined, setting readyToFetch to true.');
-    }
-
+    console.log('🐞 ChildDetailPage: Auth & Params Check useEffect triggered - childId:', childId);
     const token = getCookie('token');
     if (!token) {
       setError('ログインしていません。');
-      setReadyToFetch(false); // トークンがない場合も準備はできていない
+      setIsReady(false);
+      router.push('/login'); // 💡 ログインページへリダイレクト
       return;
     }
 
@@ -51,34 +38,41 @@ export default function ChildDetailPage() {
       setCurrentUserInfo(decodedToken);
     } catch (err) {
       setError('認証情報が不正です。再ログインしてください。');
-      document.cookie = 'token=; Max-Age=0; path=/';
-      setReadyToFetch(false); // 無効なトークンも準備はできていない
+      removeAuthCookie(); // 💡 不正なトークンを削除
+      setIsReady(false);
+      router.push('/login'); // 💡 ログインページへリダイレクト
       return;
     }
 
-    // ここでは API コールは行わない。readyToFetch に依存する別の useEffect で行う。
-  }, [childId, readyToFetch]); // childId と readyToFetch を依存配列に追加
+    if (childId && decodedToken) {
+        console.log('🐞 ChildDetailPage: Auth & Params OK. Setting isReady to true.');
+        setIsReady(true);
+    } else if (childId === undefined && params) { // params は存在するが childId が undefined の場合 (初期レンダリング時など)
+        console.log('🐞 ChildDetailPage: childId is undefined, waiting for params to resolve.');
+        setIsReady(false);
+    } else {
+        console.log('🐞 ChildDetailPage: childId or token info missing, not ready yet.');
+        setIsReady(false);
+    }
+  }, [childId, params, router]); // 💡 params と router を依存配列に追加
 
-  // 2つ目の useEffect: データフェッチロジック。readyToFetch が true になったときにのみ実行
+  // データフェッチ用のuseEffect
   useEffect(() => {
-    // readyToFetch が false、または currentUserInfo がまだない場合は何もしない
-    if (!readyToFetch || !currentUserInfo) {
-      console.log('🐞 ChildDetailPage: Second useEffect (Data fetch): Not ready to fetch or currentUserInfo missing.');
+    if (!isReady || !childId || !currentUserInfo) {
+      console.log('🐞 ChildDetailPage: Data Fetch useEffect: Not ready or critical info missing.', { isReady, childId, hasCurrentUserInfo: !!currentUserInfo });
       return;
     }
-    console.log('🐞 ChildDetailPage: Second useEffect (Data fetch): Ready to fetch!');
+    console.log('🐞 ChildDetailPage: Data Fetch useEffect: Ready to fetch data for childId:', childId);
 
-    const token = getCookie('token'); // 念のためトークンを再取得 (state にあるはずだが、防御的なチェック)
+    const token = getCookie('token'); // isReady の段階でトークンはあるはずだが念のため
     if (!token) {
-      setError('ログイン情報がありません (再確認)。');
+      setError('ログイン情報が確認できませんでした。');
       return;
     }
 
     // 子ども情報を取得
     fetch(`/api/children?id=${childId}`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(async res => {
         if (!res.ok) {
@@ -104,22 +98,18 @@ export default function ChildDetailPage() {
         setError(err.message);
     });
 
-    // スキルと学習進捗のフェッチも、この条件ブロック内で呼び出す
-    fetchSkills();
-    fetchLearningProgress();
+    fetchSkills(token);
+    fetchLearningProgress(token);
 
-  }, [readyToFetch, childId, currentUserInfo]); // readyToFetch, childId, currentUserInfo を依存配列に追加
+  }, [isReady, childId, currentUserInfo]);
 
-  // fetchSkills と fetchLearningProgress 関数は useEffect の外で定義するが、
-  // 呼び出しは上記の readyToFetch が true になる useEffect 内で行われる
-  const fetchSkills = () => {
-    const token = getCookie('token');
-    if (!token) return;
-
+  const fetchSkills = (token) => {
+    if (!childId) {
+        console.warn("fetchSkills: childId is undefined, skipping API call.");
+        return;
+    }
     fetch(`/api/children/${childId}/skills`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(async res => {
         if (!res.ok) {
@@ -131,18 +121,17 @@ export default function ChildDetailPage() {
       .then(setSkillLogs)
       .catch(err => {
         console.error('Fetch skill logs error:', err.message);
-        setError(err.message);
+        setError(prevError => prevError || err.message);
       });
   };
 
-  const fetchLearningProgress = () => {
-    const token = getCookie('token');
-    if (!token) return;
-
+  const fetchLearningProgress = (token) => {
+    if (!childId) {
+        console.warn("fetchLearningProgress: childId is undefined, skipping API call.");
+        return;
+    }
     fetch(`/api/children/${childId}/learning-progress`, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+      headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(async res => {
         if (!res.ok) {
@@ -154,19 +143,18 @@ export default function ChildDetailPage() {
       .then(setLearningProgress)
       .catch(err => {
         console.error('Fetch learning progress error:', err.message);
-        setError(err.message);
+        setError(prevError => prevError || err.message);
       });
   };
 
-  // データの読み込み中表示。child, currentUserInfo, readyToFetch の全てが揃うまで表示する。
   if (error) return <main style={{ padding: '2rem' }}><p style={{ color: 'red' }}>{error}</p></main>;
-  if (!child || !currentUserInfo || !readyToFetch) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>;
+  if (!isReady || !child) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>;
 
   return (
     <main style={{ padding: '2rem' }}>
       <h1>{child.name} さんの学習履歴</h1>
-      <p>誕生日: {child.birthday}</p>
-      <p>性別: {child.gender}</p>
+      <p>誕生日: {child.birthday ? new Date(child.birthday).toLocaleDateString() : '未設定'}</p>
+      <p>性別: {child.gender || '未設定'}</p>
 
       <h2 style={{ marginTop: '2rem' }}>スキルログ</h2>
       {skillLogs.length === 0 ? (
@@ -220,9 +208,10 @@ export default function ChildDetailPage() {
         </table>
       )}
 
-      {child && (currentUserInfo.role === 'parent' || (currentUserInfo.role === 'child' && child.child_user_id === currentUserInfo.id)) && (
-        <SkillLogForm childId={childId} onSuccess={fetchSkills} />
+      {currentUserInfo && child && (currentUserInfo.role === 'parent' || (currentUserInfo.role === 'child' && child.child_user_id === currentUserInfo.id)) && (
+        <SkillLogForm childId={childId} onSuccess={() => fetchSkills(getCookie('token'))} />
       )}
+       <button onClick={() => router.back()} style={{ marginTop: '1rem' }}>戻る</button>
     </main>
   );
 }
