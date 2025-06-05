@@ -15,16 +15,25 @@ export default function ChildDetailPage() {
   const [skillLogs, setSkillLogs] = useState([]);
   const [learningProgress, setLearningProgress] = useState([]);
   const [error, setError] = useState('');
+  const [currentUserInfo, setCurrentUserInfo] = useState(null); // ✅ 追加: ログインユーザーの情報を保持する状態
 
   useEffect(() => {
-    // const token = localStorage.getItem('token'); // ❌ 変更
     const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) {
       setError('ログインしていません。');
       return;
     }
 
-    const decoded = jwtDecode(token);
+    let decodedToken = null; // ✅ decodedTokenを定義
+    try {
+      decodedToken = jwtDecode(token);
+      setCurrentUserInfo(decodedToken); // ✅ ログインユーザーの情報を状態にセット
+    } catch (err) {
+      setError('認証情報が不正です。再ログインしてください。');
+      document.cookie = 'token=; Max-Age=0; path=/;'; // ✅ Cookie削除
+      return; // エラーなので処理を中断
+    }
+
 
     // 子ども情報を取得
     // ここでは /api/children を利用し、idでフィルタリングしています。
@@ -47,7 +56,7 @@ export default function ChildDetailPage() {
             // 1. ログインユーザーが管理者
             // 2. ログインユーザーがこの子どもの保護者 (user_id が一致)
             // 3. ログインユーザーがこの子ども自身 (child_user_id が一致)
-            if (decoded.role === 'admin' || foundChild.user_id === decoded.id || foundChild.child_user_id === decoded.id) {
+            if (decodedToken.role === 'admin' || foundChild.user_id === decodedToken.id || foundChild.child_user_id === decodedToken.id) { // ✅ decodedToken を使用
                 setChild(foundChild);
             } else {
                 setError('この子どもの情報を閲覧する権限がありません。');
@@ -66,7 +75,6 @@ export default function ChildDetailPage() {
   }, [childId]);
 
   const fetchSkills = () => {
-    // const token = localStorage.getItem('token'); // ❌ 変更
     const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) return;
 
@@ -90,7 +98,6 @@ export default function ChildDetailPage() {
   };
 
   const fetchLearningProgress = () => {
-    // const token = localStorage.getItem('token'); // ❌ 変更
     const token = getCookie('token'); // ✅ Cookieから取得
     if (!token) return;
 
@@ -120,7 +127,7 @@ export default function ChildDetailPage() {
   }
 
   if (error) return <main style={{ padding: '2rem' }}><p style={{ color: 'red' }}>{error}</p></main>;
-  if (!child) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>;
+  if (!child || !currentUserInfo) return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>; // ✅ currentUserInfo も待つ
 
   return (
     <main style={{ padding: '2rem' }}>
@@ -183,7 +190,7 @@ export default function ChildDetailPage() {
 
       {/* スキルログフォームは、ログインしているユーザーが親か、
           または自身がチャットしている子どもの場合のみ表示 */}
-      {child && (decoded.role === 'parent' || (decoded.role === 'child' && child.child_user_id === decoded.id)) && (
+      {child && (currentUserInfo.role === 'parent' || (currentUserInfo.role === 'child' && child.child_user_id === currentUserInfo.id)) && ( // ✅ currentUserInfo を使用
         <SkillLogForm childId={childId} onSuccess={fetchSkills} />
       )}
     </main>
