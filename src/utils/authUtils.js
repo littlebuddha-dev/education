@@ -1,12 +1,14 @@
 // src/utils/authUtils.js
-// 安定版：シンプルで確実な認証ユーティリティ
+// タイトル: 認証ユーティリティ（最終修正版）
+// 役割: 脆弱な手動トークン解析を廃止し、安全なjwt-decodeライブラリに統一します。
+
+import { jwtDecode } from 'jwt-decode'; // 専門ライブラリをインポート
 
 const COOKIE_CONFIG = {
   name: 'token',
-  maxAge: 7 * 24 * 60 * 60,
+  maxAge: 7 * 24 * 60 * 60, // 7日間
   path: '/',
   sameSite: 'Lax',
-  httpOnly: false,
 };
 
 export function getCookie(name) {
@@ -34,12 +36,8 @@ export function setAuthCookie(token) {
   }
 
   try {
-    console.log('🍪 Cookie設定開始:', token.substring(0, 20) + '...');
-    
-    // シンプルなCookie設定
-    const cookieString = `${COOKIE_CONFIG.name}=${encodeURIComponent(token)}; path=/; max-age=${COOKIE_CONFIG.maxAge}; SameSite=Lax`;
+    const cookieString = `${COOKIE_CONFIG.name}=${encodeURIComponent(token)}; path=${COOKIE_CONFIG.path}; max-age=${COOKIE_CONFIG.maxAge}; SameSite=${COOKIE_CONFIG.sameSite}`;
     document.cookie = cookieString;
-    
     console.log('✅ Cookie設定完了');
   } catch (error) {
     console.error('❌ Cookie設定エラー:', error);
@@ -50,30 +48,33 @@ export function removeAuthCookie() {
   if (typeof document === 'undefined') return;
 
   try {
-    document.cookie = `${COOKIE_CONFIG.name}=; path=/; max-age=0`;
-    document.cookie = `${COOKIE_CONFIG.name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    // 複数の設定でCookieを確実に削除
+    const domain = window.location.hostname;
+    const commonPath = `path=${COOKIE_CONFIG.path}; SameSite=${COOKIE_CONFIG.sameSite}`;
+    
+    document.cookie = `${COOKIE_CONFIG.name}=; ${commonPath}; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    if (domain !== 'localhost') {
+        document.cookie = `${COOKIE_CONFIG.name}=; ${commonPath}; domain=${domain}; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+    }
     console.log('🗑️ Cookie削除完了');
   } catch (error) {
     console.error('Cookie削除エラー:', error);
   }
 }
 
+/**
+ * 🔧 修正: jwt-decode を使用してトークンの有効性を堅牢にチェックします。
+ */
 export function isTokenValid() {
   const token = getCookie(COOKIE_CONFIG.name);
   if (!token) return false;
 
   try {
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      console.error('無効なJWT形式');
-      removeAuthCookie();
-      return false;
-    }
-
-    const payload = JSON.parse(atob(parts[1]));
+    const decoded = jwtDecode(token);
     const now = Math.floor(Date.now() / 1000);
     
-    if (payload.exp && now >= payload.exp) {
+    // 有効期限 (exp) が存在し、かつ現在時刻が有効期限を過ぎていたら無効
+    if (decoded.exp && now >= decoded.exp) {
       console.log('トークンの有効期限切れ');
       removeAuthCookie();
       return false;
@@ -82,38 +83,44 @@ export function isTokenValid() {
     return true;
   } catch (error) {
     console.error('トークン検証エラー:', error);
-    removeAuthCookie();
+    removeAuthCookie(); // 不正なトークンは削除
     return false;
   }
 }
 
+/**
+ * 🔧 修正: jwt-decode を使用して安全にユーザー情報を取得します。
+ */
 export function getUserFromToken() {
+  // isTokenValidは内部で有効期限チェックと不正トークンの削除を行う
   if (!isTokenValid()) return null;
 
   try {
     const token = getCookie(COOKIE_CONFIG.name);
-    const parts = token.split('.');
-    const payload = JSON.parse(atob(parts[1]));
+    // isTokenValidでチェック済みなので、ここではデコードするだけ
+    const decodedPayload = jwtDecode(token);
     
     return {
-      id: payload.id,
-      email: payload.email,
-      first_name: payload.first_name,
-      last_name: payload.last_name,
-      role: payload.role,
+      id: decodedPayload.id,
+      email: decodedPayload.email,
+      first_name: decodedPayload.first_name,
+      last_name: decodedPayload.last_name,
+      role: decodedPayload.role,
     };
   } catch (error) {
     console.error('ユーザー情報取得エラー:', error);
+    // エラーが起きた場合は念のためCookieを削除
     removeAuthCookie();
     return null;
   }
 }
 
-// 互換性のための関数
+// 互換性のための関数 (変更なし)
 export function ensureCookieSync(token) {
   setAuthCookie(token);
 }
 
+// 互換性のための関数 (変更なし)
 export function withAuthLock(fn) {
   return async (...args) => {
     try {

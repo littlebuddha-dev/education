@@ -1,9 +1,9 @@
 // src/components/Navbar.js
-// 独立認証システム対応版：Cookie依存を完全に排除
+// 修正版：管理者向けにドロップダウンメニューを追加
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function Navbar() {
@@ -21,8 +21,10 @@ export default function Navbar() {
   const [childProfileId, setChildProfileId] = useState(null);
   const [isLoadingChild, setIsLoadingChild] = useState(false);
   const [debugInfo, setDebugInfo] = useState({});
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false); // ドロップダウンの開閉状態
+  const dropdownRef = useRef(null); // ドロップダウンの参照
 
-  // デバッグ情報の収集（独立認証システム版）
+  // デバッグ情報の収集
   useEffect(() => {
     if (process.env.NODE_ENV !== 'development') return;
 
@@ -77,6 +79,18 @@ export default function Navbar() {
 
     fetchChildProfile();
   }, [user, isAuthenticated]);
+  
+  // ドロップダウンの外側をクリックしたときに閉じる処理
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [dropdownRef]);
+
 
   const handleLogout = () => {
     try {
@@ -89,53 +103,6 @@ export default function Navbar() {
     }
   };
 
-  const handleAdminUsersClick = async (e) => {
-    e.preventDefault();
-    
-    console.log('👥 ユーザー管理クリック - 独立認証システム');
-    
-    // 独立認証システムでの認証確認
-    const currentToken = getCurrentToken();
-    const tokenIsValid = isTokenValid();
-    
-    console.log('🔍 独立認証システム状態:', {
-      contextAuthenticated: isAuthenticated,
-      contextUser: user,
-      hasStoredToken: !!currentToken,
-      tokenValid: tokenIsValid,
-      userRole: user?.role
-    });
-
-    // AuthContextの認証状態のみを信頼
-    if (isAuthenticated && user && user.role === 'admin') {
-      console.log('✅ 独立認証システム: 認証OK、管理者ページへ遷移');
-      
-      try {
-        await router.push('/admin/users');
-        console.log('✅ router.push 完了');
-      } catch (routerError) {
-        console.error('Router エラー:', routerError);
-        // フォールバック: 直接リロード
-        window.location.href = '/admin/users';
-      }
-      return;
-    }
-
-    // 認証に問題がある場合
-    console.error('❌ 独立認証システム: 認証に問題があります', {
-      isAuthenticated,
-      user: user?.email,
-      role: user?.role
-    });
-    
-    alert(`認証エラー: 
-    認証状態: ${isAuthenticated}
-    ユーザー: ${user?.email || 'なし'}
-    ロール: ${user?.role || 'なし'}
-    
-    ページをリロードして再度お試しください。`);
-  };
-
   const renderAuthenticatedNav = () => {
     const displayName = user?.last_name && user?.first_name 
       ? `${user.last_name} ${user.first_name}` 
@@ -145,26 +112,30 @@ export default function Navbar() {
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
         <span style={{ 
           padding: '0.5rem', 
-          backgroundColor: '#f5f5f5', 
+          backgroundColor: 'rgba(255,255,255,0.1)',
           borderRadius: '4px',
           fontSize: '0.9em'
         }}>
           👤 {displayName} さん ({getRoleDisplayName(user?.role)})
         </span>
 
-        {/* 管理者用ナビゲーション */}
+        {/* 🔧 修正: 管理者用ナビゲーションをドロップダウンに変更 */}
         {user?.role === 'admin' && (
-          <button
-            onClick={handleAdminUsersClick}
-            style={{
-              ...navLinkStyle,
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer'
-            }}
-          >
-            👥 ユーザー管理
-          </button>
+          <div style={{ position: 'relative' }} ref={dropdownRef}>
+            <button
+              onClick={() => setIsDropdownOpen(prev => !prev)}
+              style={{ ...navLinkStyle, cursor: 'pointer', userSelect: 'none' }}
+            >
+              機能メニュー ▼
+            </button>
+            {isDropdownOpen && (
+              <div style={dropdownMenuStyle}>
+                <a href="/admin/users" style={dropdownLinkStyle}>👥 ユーザー管理</a>
+                <a href="/children" style={dropdownLinkStyle}>👶 子ども管理</a>
+                <a href="/chat" style={dropdownLinkStyle}>💬 チャット</a>
+              </div>
+            )}
+          </div>
         )}
 
         {/* 保護者用ナビゲーション */}
@@ -233,7 +204,6 @@ export default function Navbar() {
     return roleNames[role] || role || 'Unknown';
   };
 
-  // エラー表示（開発用）
   if (error && process.env.NODE_ENV === 'development') {
     console.error('Navbar認証エラー:', error);
   }
@@ -258,7 +228,7 @@ export default function Navbar() {
         )}
       </nav>
 
-      {/* 開発環境でのデバッグ情報表示（独立認証システム版） */}
+      {/* 開発環境でのデバッグ情報表示 */}
       {process.env.NODE_ENV === 'development' && (
         <div style={{
           position: 'fixed',
@@ -273,14 +243,10 @@ export default function Navbar() {
           zIndex: 9999,
           fontFamily: 'monospace'
         }}>
-          <h4 style={{ margin: '0 0 0.5rem 0' }}>🔍 独立認証デバッグ</h4>
+          <h4 style={{ margin: '0 0 0.5rem 0' }}>🔍 認証デバッグ</h4>
           <div>Context認証: {debugInfo.contextAuthenticated ? '✅' : '❌'}</div>
-          <div>Context読込: {debugInfo.contextLoading ? '⏳' : '完了'}</div>
           <div>Contextユーザー: {debugInfo.contextUser?.email || 'なし'}</div>
-          <div>Contextロール: {debugInfo.contextUser?.role || 'なし'}</div>
           <div>保存トークン: {debugInfo.hasStoredToken ? '✅' : '❌'}</div>
-          <div>トークン有効: {debugInfo.storedTokenValid ? '✅' : '❌'}</div>
-          <div>トークン: {debugInfo.tokenPreview}</div>
           <div style={{ fontSize: '10px', marginTop: '0.5rem' }}>
             更新: {debugInfo.timestamp}
           </div>
@@ -315,9 +281,8 @@ const navLinkStyle = {
   backgroundColor: 'rgba(255,255,255,0.1)',
   transition: 'background-color 0.2s',
   fontSize: '0.9em',
-  ':hover': {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-  },
+  border: 'none',
+  fontFamily: 'inherit',
 };
 
 const logoutButtonStyle = {
@@ -351,3 +316,35 @@ const registerLinkStyle = {
   fontSize: '0.9em',
   fontWeight: 'bold',
 };
+
+// ✨ 追加: ドロップダウン用のスタイル
+const dropdownMenuStyle = {
+  position: 'absolute',
+  top: '120%',
+  left: 0,
+  backgroundColor: 'white',
+  borderRadius: '8px',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+  zIndex: 100,
+  minWidth: '160px',
+  overflow: 'hidden',
+  border: '1px solid #eee'
+};
+
+const dropdownLinkStyle = {
+  display: 'block',
+  padding: '0.8rem 1.2rem',
+  color: '#333',
+  textDecoration: 'none',
+  fontSize: '0.9em',
+  transition: 'background-color 0.2s',
+};
+
+// ホバーエフェクトはCSS疑似クラスではインラインで表現できないため、
+// コンポーネント内で処理するか、別途CSSファイルで定義する必要があります。
+// ここでは簡単のため省略しますが、実際には以下のようなCSSを適用すると良いでしょう。
+/*
+.dropdown-link:hover {
+  background-color: #f5f5f5;
+}
+*/

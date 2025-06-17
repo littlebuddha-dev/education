@@ -1,5 +1,5 @@
 // src/context/AuthContext.js
-// 安定版：シンプルな認証コンテキスト
+// 修正版：isLoadingの状態管理をより厳密に
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -15,93 +15,66 @@ const initialState = {
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(initialState);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // 初期値はtrue
   const [error, setError] = useState(null);
 
-  // 認証状態の初期化
   useEffect(() => {
     console.log('🔄 AuthContext: 認証状態の初期化開始');
     
-    const initializeAuth = () => {
+    // 非同期処理として定義
+    const initializeAuth = async () => {
       try {
         setError(null);
         
-        if (!isTokenValid()) {
+        // isTokenValidとgetUserFromTokenは同期的だが、将来的な拡張性を考慮
+        if (isTokenValid()) {
+          const user = getUserFromToken();
+          const token = getCookie('token');
+          if (user && token) {
+            console.log(`AuthContext: 認証状態を復元 - ${user.email} (${user.role})`);
+            setSession({ user, token, isAuthenticated: true });
+          } else {
+            setSession(initialState);
+          }
+        } else {
           console.log('AuthContext: 有効なトークンが見つかりません');
           setSession(initialState);
-          setIsLoading(false);
-          return;
         }
-
-        const user = getUserFromToken();
-        const token = getCookie('token');
-
-        if (user && token) {
-          console.log(`AuthContext: 認証状態を復元 - ${user.email} (${user.role})`);
-          setSession({
-            user,
-            token,
-            isAuthenticated: true,
-          });
-        } else {
-          console.log('AuthContext: ユーザー情報の取得に失敗');
-          removeAuthCookie();
-          setSession(initialState);
-        }
-      } catch (error) {
-        console.error('AuthContext: 初期化エラー:', error);
+      } catch (err) {
+        console.error('AuthContext: 初期化エラー:', err);
         setError('認証状態の復元に失敗しました');
-        removeAuthCookie();
         setSession(initialState);
       } finally {
+        // 全ての処理が終わってからisLoadingをfalseにする
         setIsLoading(false);
       }
     };
 
     initializeAuth();
-  }, []);
+  }, []); // このuseEffectはマウント時に一度だけ実行
 
-  // ログイン処理
   const login = useCallback(async (token, userData = null) => {
     try {
       setError(null);
-      
-      if (!token) {
-        throw new Error('トークンが提供されていません');
-      }
+      if (!token) throw new Error('トークンが提供されていません');
 
-      // Cookieに保存
       setAuthCookie(token);
-      
-      // ユーザー情報の取得
-      let user = userData;
-      if (!user) {
-        user = getUserFromToken();
-      }
-
-      if (!user) {
-        throw new Error('ユーザー情報の取得に失敗しました');
-      }
+      const user = userData || getUserFromToken();
+      if (!user) throw new Error('ユーザー情報の取得に失敗しました');
 
       console.log(`AuthContext: ログイン成功 - ${user.email} (${user.role})`);
-      
-      setSession({
-        user,
-        token,
-        isAuthenticated: true,
-      });
-
+      setSession({ user, token, isAuthenticated: true });
       return { success: true };
-    } catch (error) {
-      console.error('AuthContext: ログインエラー:', error);
-      setError(error.message);
+
+    } catch (err) {
+      console.error('AuthContext: ログインエラー:', err);
+      setError(err.message);
       removeAuthCookie();
       setSession(initialState);
-      return { success: false, error: error.message };
+      return { success: false, error: err.message };
     }
   }, []);
 
-  // ログアウト処理
   const logout = useCallback(() => {
     try {
       console.log('AuthContext: ログアウト実行');
@@ -114,12 +87,16 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const getCurrentToken = useCallback(() => getCookie('token'), []);
+
   const value = {
     ...session,
     isLoading,
     error,
     login,
     logout,
+    getCurrentToken,
+    isTokenValid,
   };
 
   return (

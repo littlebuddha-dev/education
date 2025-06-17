@@ -1,11 +1,8 @@
 // src/app/layout.js
-// タイトル: ルートレイアウト
-// 役割: 全ページに共通のHTML構造とコンポーネント（Navbarなど）を提供します。
-//       [修正] AuthProviderを追加し、アプリケーション全体で認証コンテキストを有効にします。
-
+// 修正版：AuthGuardを削除し、シンプルな構成に戻す
 import './globals.css';
 import Navbar from '@/components/Navbar';
-import { AuthProvider } from '@/context/AuthContext'; // [修正] AuthProviderをインポート
+import { AuthProvider } from '@/context/AuthContext';
 
 export const metadata = {
   title: '教育AIシステム',
@@ -16,7 +13,6 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ja">
       <body>
-        {/* [修正] AuthProviderで全体をラップ */}
         <AuthProvider>
           <Navbar />
           <main>{children}</main>

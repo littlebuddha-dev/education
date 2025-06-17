@@ -1,57 +1,57 @@
 // src/app/admin/users/skills/page.js
+// タイトル: 管理者向けスキル統計ページ（修正版）
+// 役割: useAuthコンテキストを利用して認証を安定化させる
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { jwtDecode } from 'jwt-decode';
-import { getCookie, removeAuthCookie } from '@/utils/authUtils';
+import { useAuth } from '@/context/AuthContext'; // 共通のuseAuthフックをインポート
 
 export default function AdminUserSkillsStatsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const targetUserId = searchParams.get('id'); // クエリパラメータ 'id' から対象ユーザーIDを取得
+  // 認証コンテキストから、ユーザー情報、トークン、認証状態、ローディング状態を取得
+  const { user, token, isAuthenticated, isLoading: isAuthLoading } = useAuth();
 
   const [stats, setStats] = useState([]);
   const [error, setError] = useState('');
   const [targetUserName, setTargetUserName] = useState('');
+  const [isFetching, setIsFetching] = useState(true);
 
   useEffect(() => {
-    console.log('🐞 AdminUserSkillsStatsPage: useEffect triggered. targetUserId:', targetUserId);
+    const targetUserId = searchParams.get('id');
 
-    const token = getCookie('token');
-    if (!token) {
-      router.push('/login?redirectTo=' + encodeURIComponent(window.location.pathname + window.location.search));
+    // 1. AuthContextの認証情報読み込みを待つ
+    if (isAuthLoading) {
       return;
     }
 
-    let decoded;
-    try {
-      decoded = jwtDecode(token);
-    } catch (err) {
-      setError('無効な認証トークンです。');
-      removeAuthCookie();
-      router.push('/login');
+    // 2. 認証されていなければログインページへ
+    if (!isAuthenticated) {
+      const redirectTo = encodeURIComponent(window.location.pathname + window.location.search);
+      router.push(`/login?redirectTo=${redirectTo}`);
       return;
     }
 
-    if (decoded.role !== 'admin') {
+    // 3. 管理者でなければエラー表示
+    if (user?.role !== 'admin') {
       setError('⚠️ 管理者のみ閲覧可能です');
+      setIsFetching(false);
       return;
     }
 
+    // 4. 対象ユーザーIDがなければエラー表示
     if (!targetUserId) {
       setError('対象のユーザーIDが指定されていません。');
+      setIsFetching(false);
       return;
     }
-    
-    // 対象ユーザーの情報を取得して表示する（任意）
-    // APIを叩いてユーザー名などを取得しても良い
-    // ここでは一旦IDのみ表示
+
     setTargetUserName(`ユーザーID: ${targetUserId}`);
 
-
+    // 5. 認証情報が確定してからデータ取得APIを叩く
     fetch(`/api/admin/users/${targetUserId}/skills`, {
-      headers: { Authorization: `Bearer ${token}` }
+      headers: { Authorization: `Bearer ${token}` } // コンテキストから取得したトークンを使用
     })
       .then(async res => {
         if (!res.ok) {
@@ -61,23 +61,26 @@ export default function AdminUserSkillsStatsPage() {
         return res.json();
       })
       .then(data => {
-        if (data.length > 0 && data[0].child_name) { // ユーザー名も取得できれば表示する
-            const firstChildName = data[0].child_name;
-            // このAPIは子どもの名前ごとに統計を返すので、対象ユーザー自身の名前ではない
-            // より正確なユーザー名表示のためには、別途ユーザー情報を取得するAPIが必要
-            // setTargetUserName(`${data[0].child_name} (保護者ID: ${targetUserId})`);
-        }
         setStats(data);
         setError('');
       })
       .catch(err => {
         console.error('Fetch error for user skills stats:', err.message);
         setError(err.message);
+      })
+      .finally(() => {
+        setIsFetching(false);
       });
-  }, [targetUserId, router]);
+  }, [isAuthLoading, isAuthenticated, user, token, router, searchParams]);
 
+  // ローディング中の表示
+  if (isAuthLoading || isFetching) {
+    return <main style={{ padding: '2rem' }}><p>読み込み中...</p></main>;
+  }
+
+  // 子どもごとに統計をグループ化
   const groupByChild = stats.reduce((acc, row) => {
-    const childKey = row.child_name || `子ども (ID: ${row.child_id})`; // 子ども名がない場合のフォールバック
+    const childKey = row.child_name || `子ども (ID: ${row.child_id})`;
     acc[childKey] = acc[childKey] || [];
     acc[childKey].push(row);
     return acc;

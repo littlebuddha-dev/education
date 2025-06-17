@@ -1,62 +1,48 @@
 // src/lib/authConfig.js
-// 最終修正版：ルートパス "/" の誤マッチを防ぐ
+// タイトル: 認証設定ファイル（最終確定版）
+// 役割: 公開パスと管理者パスの判定ロジックをシンプルかつ確実に定義します。
 
-export const publicPaths = [
+// 認証なしでアクセスできるページのパス（完全一致）
+const PUBLIC_PAGES = [
   '/',
   '/login',
-  '/users/register', 
+  '/users/register',
   '/setup',
-  '/favicon.ico',
+];
+
+// 認証なしでアクセスできるAPIのパス（前方一致）
+const PUBLIC_API_PREFIXES = [
   '/api/users/login',
   '/api/users/register',
   '/api/setup',
   '/api/tables',
   '/api/users/check-admin',
-  '/_next',
-  '/static',
-  '/_app',
-  '/.well-known',
 ];
 
+/**
+ * 指定されたパスが公開パス（認証不要）かどうかを判定します。
+ * @param {string} pathname - 判定対象のパス
+ * @returns {boolean} 公開パスであればtrueを返す
+ */
 export function isPublicPath(pathname) {
-  console.log(`🔍 isPublicPath check: "${pathname}"`);
-  
-  // 完全一致チェック
-  if (publicPaths.includes(pathname)) {
-    console.log(`✅ Exact match found: "${pathname}"`);
+  // 公開ページリストに完全一致するかチェック
+  if (PUBLIC_PAGES.includes(pathname)) {
     return true;
   }
-  
-  // プレフィックスマッチチェック（ルートパス "/" を除外）
-  for (const publicPath of publicPaths) {
-    // ルートパス "/" は完全一致のみで処理済みなのでスキップ
-    if (publicPath === '/') {
-      continue;
-    }
-    
-    // /path で始まり、次が / の場合のマッチ
-    if (pathname.startsWith(publicPath + '/')) {
-      console.log(`✅ Prefix match: "${pathname}" starts with "${publicPath}/"`);
-      return true;
-    }
-    
-    // /path/ 形式の場合のマッチ
-    if (publicPath.endsWith('/') && pathname.startsWith(publicPath)) {
-      console.log(`✅ Trailing slash match: "${pathname}" starts with "${publicPath}"`);
-      return true;
-    }
+
+  // 公開APIリストのプレフィックスに一致するかチェック
+  if (PUBLIC_API_PREFIXES.some(prefix => pathname.startsWith(prefix))) {
+    return true;
   }
-  
-  console.log(`❌ No match found for: "${pathname}"`);
+
   return false;
 }
 
+/**
+ * 指定されたパスが管理者専用パスかどうかを判定します。
+ * @param {string} pathname - 判定対象のパス
+ * @returns {boolean} 管理者専用パスであればtrueを返す
+ */
 export function isAdminPath(pathname) {
-  const result = pathname.startsWith('/admin');
-  console.log(`🛡️ isAdminPath("${pathname}"): ${result}`);
-  return result;
-}
-
-export function isParentPath(pathname) {
-  return pathname.startsWith('/children');
+  return pathname.startsWith('/admin');
 }
