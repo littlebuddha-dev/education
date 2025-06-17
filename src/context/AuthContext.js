@@ -1,8 +1,8 @@
 // src/context/AuthContext.js
-// 修正版：認証コンテキスト（安定性向上・エラーハンドリング強化）
+// 安定版：シンプルな認証コンテキスト
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { getCookie, setAuthCookie, removeAuthCookie, getUserFromToken, isTokenValid } from '@/utils/authUtils';
 
 const AuthContext = createContext(null);
@@ -20,7 +20,9 @@ export function AuthProvider({ children }) {
 
   // 認証状態の初期化
   useEffect(() => {
-    const initializeAuth = async () => {
+    console.log('🔄 AuthContext: 認証状態の初期化開始');
+    
+    const initializeAuth = () => {
       try {
         setError(null);
         
@@ -108,45 +110,17 @@ export function AuthProvider({ children }) {
       setError(null);
     } catch (error) {
       console.error('AuthContext: ログアウトエラー:', error);
-      // ログアウトエラーでも状態はリセット
       setSession(initialState);
     }
   }, []);
 
-  // トークンの有効性を定期的にチェック
-  useEffect(() => {
-    if (!session.isAuthenticated) return;
-
-    const checkTokenValidity = () => {
-      if (!isTokenValid()) {
-        console.log('AuthContext: トークンが無効になりました');
-        logout();
-      }
-    };
-
-    // 5分ごとにチェック
-    const interval = setInterval(checkTokenValidity, 5 * 60 * 1000);
-    
-    return () => clearInterval(interval);
-  }, [session.isAuthenticated, logout]);
-
-  // メモ化されたコンテキスト値
-  const value = useMemo(() => ({
+  const value = {
     ...session,
     isLoading,
     error,
     login,
     logout,
-    refreshAuth: () => {
-      const user = getUserFromToken();
-      const token = getCookie('token');
-      if (user && token && isTokenValid()) {
-        setSession({ user, token, isAuthenticated: true });
-      } else {
-        logout();
-      }
-    }
-  }), [session, isLoading, error, login, logout]);
+  };
 
   return (
     <AuthContext.Provider value={value}>

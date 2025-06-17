@@ -1,11 +1,11 @@
 // src/app/login/page.js
-// 修正版：ログインページ（エラーハンドリング強化・UX改善）
+// 修正版：シンプルなログインページ（エラー修正）
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { ensureCookieSync } from '@/utils/cookieSync';
+import { setAuthCookie } from '@/utils/authUtils';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -97,8 +97,8 @@ export default function LoginPage() {
         throw new Error('認証トークンが取得できませんでした');
       }
 
-      // 🔄 Cookie同期を強化
-      ensureCookieSync(data.token);
+      // Cookie設定を確実に
+      setAuthCookie(data.token);
 
       // 認証コンテキストにログイン情報を設定
       const loginResult = await login(data.token, data.user);

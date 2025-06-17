@@ -1,5 +1,5 @@
 // src/utils/authUtils.js
-// 最終修正版：開発環境でのCookie問題を解決
+// 安定版：シンプルで確実な認証ユーティリティ
 
 const COOKIE_CONFIG = {
   name: 'token',
@@ -36,38 +36,13 @@ export function setAuthCookie(token) {
   try {
     console.log('🍪 Cookie設定開始:', token.substring(0, 20) + '...');
     
-    // 🔧 修正：開発環境向けの最もシンプルな設定
-    const simpleCookie = `${COOKIE_CONFIG.name}=${token}; path=/; max-age=${COOKIE_CONFIG.maxAge}`;
-    document.cookie = simpleCookie;
-    console.log('🍪 シンプル設定:', simpleCookie);
+    // シンプルなCookie設定
+    const cookieString = `${COOKIE_CONFIG.name}=${encodeURIComponent(token)}; path=/; max-age=${COOKIE_CONFIG.maxAge}; SameSite=Lax`;
+    document.cookie = cookieString;
     
-    // 即座に確認
-    const immediateCheck = getCookie(COOKIE_CONFIG.name);
-    if (immediateCheck) {
-      console.log('✅ Cookie設定成功 (即座確認)');
-    } else {
-      console.log('⚠️ Cookie設定未確認、再試行中...');
-      
-      // 🔧 修正：エンコーディングなしで再試行
-      document.cookie = `${COOKIE_CONFIG.name}=${token}; path=/`;
-      
-      // 少し待ってから確認
-      setTimeout(() => {
-        const delayedCheck = getCookie(COOKIE_CONFIG.name);
-        if (delayedCheck) {
-          console.log('✅ Cookie設定成功 (遅延確認)');
-        } else {
-          console.error('❌ Cookie設定失敗 - 手動設定を推奨');
-          console.log('手動設定用コマンド:');
-          console.log(`document.cookie = "token=${token}; path=/"; location.reload();`);
-        }
-      }, 500);
-    }
-
+    console.log('✅ Cookie設定完了');
   } catch (error) {
     console.error('❌ Cookie設定エラー:', error);
-    console.log('手動設定用コマンド:');
-    console.log(`document.cookie = "token=${token}; path=/"; location.reload();`);
   }
 }
 
@@ -134,12 +109,18 @@ export function getUserFromToken() {
   }
 }
 
-// 🔧 追加：開発環境用のデバッグヘルパー
-export function debugCookieState() {
-  console.log('🔍 Cookie Debug Info:');
-  console.log('Current cookies:', document.cookie);
-  console.log('Token exists:', document.cookie.includes('token'));
-  console.log('Token value:', getCookie('token')?.substring(0, 50) + '...');
-  console.log('Token valid:', isTokenValid());
-  console.log('User from token:', getUserFromToken());
+// 互換性のための関数
+export function ensureCookieSync(token) {
+  setAuthCookie(token);
+}
+
+export function withAuthLock(fn) {
+  return async (...args) => {
+    try {
+      return await fn(...args);
+    } catch (error) {
+      console.error('withAuthLock エラー:', error);
+      throw error;
+    }
+  };
 }
