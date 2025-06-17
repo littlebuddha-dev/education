@@ -1,111 +1,222 @@
 // src/app/login/page.js
-// タイトル: ログインページ (Context対応・堅牢化版)
-// 役割: ログイン処理を行い、認証状態をグローバルに更新します。
-//       認証済みユーザーのリダイレクトや、デバッグログの機能が追加されています。
-
+// 修正版：ログインページ（エラーハンドリング強化・UX改善）
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/context/AuthContext'; // useAuthフックをインポート
-import { jwtDecode } from 'jwt-decode'; // [追加] jwt-decodeをインポート
+import { useAuth } from '@/context/AuthContext';
+import { ensureCookieSync } from '@/utils/cookieSync';
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isAuthenticated, user } = useAuth(); // [修正] isAuthenticatedとuserも取得
+  const { login, isAuthenticated, user, isLoading: authLoading, error: authError } = useAuth();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+  });
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  
-  // [追加] 認証済みのユーザーがログインページにアクセスした場合、適切なページにリダイレクトする
+
+  // 認証済みユーザーのリダイレクト
   useEffect(() => {
-    if (isAuthenticated && user) {
-      console.log('ログイン済みのためリダイレクトします。');
+    if (!authLoading && isAuthenticated && user) {
+      console.log('ログイン済みユーザーをリダイレクト');
+      
       const DASHBOARD_PATHS = {
         admin: '/admin/users',
         parent: '/children',
         child: '/chat',
       };
-      const dashboardPath = DASHBOARD_PATHS[user.role] || '/';
-      router.replace(dashboardPath);
+      
+      const redirectTo = searchParams.get('redirectTo');
+      const defaultPath = DASHBOARD_PATHS[user.role] || '/';
+      const targetPath = redirectTo || defaultPath;
+      
+      router.replace(targetPath);
     }
-  }, [isAuthenticated, user, router]);
+  }, [isAuthenticated, user, authLoading, router, searchParams]);
 
+  // 認証コンテキストのエラー表示
+  useEffect(() => {
+    if (authError) {
+      setError(authError);
+    }
+  }, [authError]);
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    setError(''); // 入力時にエラーをクリア
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setIsLoading(true);
 
-    // [追加] 送信するデータをコンソールで確認
-    console.log(`ログイン試行: email=${email}`);
+    // バリデーション
+    if (!formData.email || !formData.password) {
+      setError('メールアドレスとパスワードを入力してください');
+      setIsLoading(false);
+      return;
+    }
+
+    if (!formData.email.includes('@')) {
+      setError('有効なメールアドレスを入力してください');
+      setIsLoading(false);
+      return;
+    }
 
     try {
-      const res = await fetch('/api/users/login', {
+      console.log(`ログイン試行: ${formData.email}`);
+      
+      const response = await fetch('/api/users/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        headers: { 
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Cookie受信のため
+        body: JSON.stringify({
+          email: formData.email.toLowerCase().trim(),
+          password: formData.password,
+        }),
       });
 
-      const data = await res.json();
+      const data = await response.json();
 
-      if (res.ok && data.token) {
-        // Contextのlogin関数を呼び出してグローバルな状態を更新
-        login(data.token);
-
-        // [修正] ログイン成功後のリダイレクト先を役割ベースで決定
-        const decoded = jwtDecode(data.token);
-        const DASHBOARD_PATHS = {
-          admin: '/admin/users',
-          parent: '/children',
-          child: '/chat',
-        };
-        const redirectTo = searchParams.get('redirectTo');
-        const targetPath = redirectTo || DASHBOARD_PATHS[decoded.role] || '/';
-        
-        router.push(targetPath);
-        
-      } else {
-        // APIからのエラーメッセージを表示
-        setError(data.error || 'ログインに失敗しました');
+      if (!response.ok) {
+        throw new Error(data.error || 'ログインに失敗しました');
       }
+
+      if (!data.token) {
+        throw new Error('認証トークンが取得できませんでした');
+      }
+
+      // 🔄 Cookie同期を強化
+      ensureCookieSync(data.token);
+
+      // 認証コンテキストにログイン情報を設定
+      const loginResult = await login(data.token, data.user);
+      
+      if (!loginResult.success) {
+        throw new Error(loginResult.error || 'ログイン処理に失敗しました');
+      }
+
+      console.log('ログイン成功、リダイレクト準備中...');
+      
+      // リダイレクトはuseEffectで処理される
+
     } catch (err) {
-      console.error('ログイン処理中に予期せぬエラー:', err);
-      setError('通信エラーが発生しました。サーバーの状態を確認してください。');
+      console.error('ログインエラー:', err);
+      setError(err.message);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 認証済みの場合、リダイレクトが完了するまで何も表示しない
+  // 認証状態の読み込み中
+  if (authLoading) {
+    return (
+      <main style={{ padding: '2rem', maxWidth: '400px', margin: 'auto' }}>
+        <div style={{ textAlign: 'center' }}>
+          <p>認証状態を確認中...</p>
+        </div>
+      </main>
+    );
+  }
+
+  // 認証済みの場合、リダイレクト完了まで何も表示しない
   if (isAuthenticated) {
     return null;
   }
 
   return (
     <main style={{ padding: '2rem', maxWidth: '400px', margin: 'auto' }}>
-      <h1>ログイン</h1>
-      {error && <div style={{ color: 'red', marginBottom: '1rem', padding: '0.5rem', border: '1px solid red', borderRadius: '4px' }}>{error}</div>}
+      <h1 style={{ textAlign: 'center', marginBottom: '2rem' }}>ログイン</h1>
+      
+      {error && (
+        <div style={{ 
+          color: 'red', 
+          marginBottom: '1rem', 
+          padding: '0.75rem', 
+          border: '1px solid red', 
+          borderRadius: '4px',
+          backgroundColor: '#ffebee'
+        }}>
+          {error}
+        </div>
+      )}
+      
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '1rem' }}>
-          <label>メールアドレス:
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem' }} />
+          <label style={{ display: 'block', marginBottom: '0.5rem' }}>
+            メールアドレス:
           </label>
+          <input 
+            type="email" 
+            name="email"
+            value={formData.email}
+            onChange={handleInputChange}
+            required 
+            disabled={isLoading}
+            style={{ 
+              width: '100%', 
+              padding: '0.75rem', 
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px'
+            }} 
+          />
         </div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label>パスワード:
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ width: '100%', padding: '0.5rem', marginTop: '0.25rem' }} />
+        
+        <div style={{ marginBottom: '1.5rem' }}>
+          <label style={{ display: 'block', marginBottom: '0.5rem' }}>
+            パスワード:
           </label>
+          <input 
+            type="password" 
+            name="password"
+            value={formData.password}
+            onChange={handleInputChange}
+            required 
+            disabled={isLoading}
+            style={{ 
+              width: '100%', 
+              padding: '0.75rem', 
+              border: '1px solid #ddd',
+              borderRadius: '4px',
+              fontSize: '16px'
+            }} 
+          />
         </div>
-        <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '0.5rem' }}>
+        
+        <button 
+          type="submit" 
+          disabled={isLoading}
+          style={{ 
+            width: '100%', 
+            padding: '0.75rem',
+            backgroundColor: isLoading ? '#ccc' : '#0070f3',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            fontSize: '16px',
+            cursor: isLoading ? 'not-allowed' : 'pointer'
+          }}
+        >
           {isLoading ? 'ログイン中...' : 'ログイン'}
         </button>
       </form>
-      <div style={{ marginTop: '1rem' }}>
-        <a href="/users/register">アカウントをお持ちでない方はこちら</a>
+      
+      <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+        <a href="/users/register" style={{ color: '#0070f3', textDecoration: 'none' }}>
+          アカウントをお持ちでない方はこちら
+        </a>
       </div>
     </main>
   );

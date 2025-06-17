@@ -1,64 +1,94 @@
 // src/middleware.js
-// タイトル: Next.js ミドルウェア
-// 役割: 保護されたページへのアクセスをサーバーサイドで検証し、未認証ユーザーをログインページにリダイレクトします。
-
+// 修正版：確実な認証チェック
 import { NextResponse } from 'next/server';
-import { publicPaths } from '@/lib/authConfig'; // [修正] 共通設定ファイルからインポート
+import { isPublicPath, isAdminPath } from '@/lib/authConfig';
+
+function validateTokenStructure(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+
+    const payload = JSON.parse(atob(parts[1]));
+    const now = Math.floor(Date.now() / 1000);
+
+    if (payload.exp && now >= payload.exp) {
+      console.log('🕐 Token expired');
+      return null;
+    }
+
+    if (!payload.id || !payload.email || !payload.role) {
+      console.log('📋 Token missing fields');
+      return null;
+    }
+
+    return payload;
+  } catch (error) {
+    console.error('❌ Token validation error:', error.message);
+    return null;
+  }
+}
+
+function clearTokenCookie(response) {
+  response.cookies.set('token', '', {
+    path: '/',
+    maxAge: 0,
+    expires: new Date(0),
+  });
+  return response;
+}
 
 export function middleware(request) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get('token')?.value;
 
-  console.log(`Middleware: パス: ${pathname}, トークン: ${token ? '有り' : '無し'}`);
+  console.log(`🚀 Middleware: ${pathname} - Token: ${token ? 'あり' : 'なし'}`);
 
-  // [修正] startsWithチェックに加え、完全一致も考慮
-  const isPublicPath = publicPaths.some(p => pathname.startsWith(p) || pathname === p.replace(/\/$/, ''));
+  // 公開パスの判定
+  const isPublic = isPublicPath(pathname);
+  console.log(`🔍 Public path check for ${pathname}: ${isPublic}`);
 
-  if (isPublicPath) {
-    console.log(`Middleware: 公開パス: ${pathname}, アクセス許可`);
+  if (isPublic) {
+    console.log(`🔓 Middleware: 公開パス許可 - ${pathname}`);
     return NextResponse.next();
   }
 
-  // トークンが無い場合
+  // 保護されたパス
+  console.log(`🔒 Middleware: 保護されたパス - ${pathname}`);
+
   if (!token) {
-    console.log(`Middleware: トークンなし、ログインページにリダイレクト: ${pathname}`);
+    console.log(`❌ Middleware: 未認証 - ${pathname}`);
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirectTo', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // トークンの簡易検証
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      throw new Error('無効なトークン形式');
-    }
-
-    const payload = JSON.parse(atob(parts[1]));
-    if (payload.exp && Date.now() >= payload.exp * 1000) {
-      console.log('Middleware: トークンが期限切れ');
-      const loginUrl = new URL('/login', request.url);
-      loginUrl.searchParams.set('redirectTo', pathname);
-      const response = NextResponse.redirect(loginUrl);
-      response.cookies.set('token', '', { maxAge: 0, path: '/' }); // 期限切れCookieを削除
-      return response;
-    }
-
-    console.log(`Middleware: 有効なトークン、アクセス許可: ${pathname}`);
-    return NextResponse.next();
-
-  } catch (err) {
-    console.error('Middleware: トークンデコードエラー:', err.message);
+  const payload = validateTokenStructure(token);
+  if (!payload) {
+    console.log(`❌ Middleware: 無効トークン - ${pathname}`);
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirectTo', pathname);
-    const response = NextResponse.redirect(loginUrl);
-    response.cookies.set('token', '', { maxAge: 0, path: '/' }); // 無効なCookieを削除
-    return response;
+    return NextResponse.redirect(loginUrl);
   }
+
+  console.log(`👤 Middleware: 認証済み - ${payload.email} (${payload.role})`);
+
+  // 管理者パスの権限チェック
+  if (isAdminPath(pathname)) {
+    if (payload.role !== 'admin') {
+      console.log(`🚫 Middleware: 管理者権限不足 - ${pathname}`);
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('error', 'insufficient_privileges');
+      return NextResponse.redirect(loginUrl);
+    }
+    console.log(`✅ Middleware: 管理者権限OK - ${pathname}`);
+  }
+
+  console.log(`✅ Middleware: アクセス許可 - ${pathname}`);
+  return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico).*)',
-  ]
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
 };

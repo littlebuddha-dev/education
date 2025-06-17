@@ -1,63 +1,148 @@
 // src/lib/auth.js
+// 修正版：Next.js App Router Cookie同期問題対応
 import jwt from 'jsonwebtoken';
 
-// ⚠️ CRITICAL: login/route.js と同じ値を使用
-const SECRET = process.env.JWT_SECRET || 'secret'; // ✅ 'default-secret' から 'secret' に変更
-// 上記と同様に、環境変数の値が確実に使われるようにすることもできます。
-// const SECRET = process.env.JWT_SECRET;
-// if (!SECRET) {
-//   throw new Error("JWT_SECRET is not set in .env.local");
-// }
+const JWT_SECRET = process.env.JWT_SECRET;
 
-// Cookie からトークンを取得し検証する関数 (サーバーサイド用)
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET環境変数が設定されていません。.env.localを確認してください。');
+}
+
+/**
+ * JWTトークンを生成します
+ */
+export function generateToken(payload, expiresIn = '7d') {
+  try {
+    return jwt.sign(payload, JWT_SECRET, { expiresIn });
+  } catch (error) {
+    console.error('JWT生成エラー:', error);
+    throw new Error('認証トークンの生成に失敗しました');
+  }
+}
+
+/**
+ * JWTトークンを検証します
+ */
+export function verifyToken(token) {
+  try {
+    return jwt.verify(token, JWT_SECRET);
+  } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      throw new Error('認証トークンの有効期限が切れています');
+    } else if (error.name === 'JsonWebTokenError') {
+      throw new Error('無効な認証トークンです');
+    } else {
+      console.error('JWT検証エラー:', error);
+      throw new Error('認証トークンの検証に失敗しました');
+    }
+  }
+}
+
+/**
+ * リクエストからトークンを取得し検証する（Next.js App Router対応版）
+ */
 export function verifyTokenFromCookie(req) {
   let token = null;
 
-  // Next.js 13+ の App Router で推奨される req.cookies からの取得
-  if (req.cookies && typeof req.cookies.get === 'function') {
-    token = req.cookies.get('token')?.value;
-  }
+  try {
+    // 1. Next.js cookies() からの取得（最優先）
+    if (req.cookies && typeof req.cookies.get === 'function') {
+      const cookieObj = req.cookies.get('token');
+      token = cookieObj?.value;
+      console.log('🍪 req.cookies.get()からトークン取得:', token ? '成功' : '失敗');
+    }
 
-  // req.headers からの取得 (req.cookies が使えない場合のフォールバックや互換性のため)
-  // fetch API の credentials: 'include' で送信された Cookie は
-  // req.headers.cookie でアクセスできる場合がある
-  if (!token && req.headers.has('cookie')) {
-    const cookiesHeader = req.headers.get('cookie');
-    const cookies = cookiesHeader.split(';');
-    for (const cookie of cookies) {
-      const parts = cookie.split('=');
-      const name = parts[0].trim();
-      if (name === 'token') {
-        token = parts[1].trim();
-        break;
+    // 2. headers の Set-Cookie からの取得（ミドルウェア設定直後）
+    if (!token && req.headers) {
+      const setCookieHeader = req.headers.get ? req.headers.get('set-cookie') : req.headers['set-cookie'];
+      if (setCookieHeader) {
+        console.log('🔄 Set-Cookieヘッダー確認:', setCookieHeader);
+        // Set-Cookieヘッダーからtoken=値を抽出
+        const match = setCookieHeader.match(/token=([^;]+)/);
+        if (match) {
+          token = match[1];
+          console.log('🆕 Set-Cookieからトークン取得成功');
+        }
       }
     }
-  }
 
-  // Authorization ヘッダーからの取得（Bearer トークン対応）
-  if (!token && req.headers.has('authorization')) {
-    const authHeader = req.headers.get('authorization');
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7);
-      console.log('🔑 Authorization ヘッダーからトークン取得');
+    // 3. 通常のCookieヘッダーからの取得
+    if (!token && req.headers) {
+      const cookieHeader = req.headers.get ? req.headers.get('cookie') : req.headers.cookie;
+      if (cookieHeader) {
+        console.log('🍪 Cookieヘッダー:', cookieHeader.substring(0, 100) + '...');
+        const cookies = cookieHeader.split(';');
+        for (const cookie of cookies) {
+          const [name, value] = cookie.split('=').map(s => s.trim());
+          if (name === 'token') {
+            token = value;
+            console.log('🍪 Cookieヘッダーからトークン取得成功');
+            break;
+          }
+        }
+      }
     }
-  }
 
-  if (!token) {
-    throw new Error('認証トークン（Cookie または Authorization ヘッダー）が見つかりません');
-  }
+    // 4. Authorization ヘッダーからの取得（フォールバック）
+    if (!token && req.headers) {
+      const authHeader = req.headers.get ? req.headers.get('authorization') : req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+        console.log('🔑 Authorizationヘッダーからトークン取得成功');
+      }
+    }
 
-  console.log('🔑 トークン取得成功:', token.substring(0, 20) + '...');
-  // console.log('🔑 SECRET使用:', SECRET); // ✅ デバッグ用。本番環境では注意
-  console.log('🔑 SECRET使用の最初の10文字:', SECRET.substring(0, 10) + '...'); // デバッグで完全な秘密鍵が出力されないようにする
+    if (!token) {
+      console.error('❌ 認証トークンが見つかりません');
+      console.log('デバッグ情報:', {
+        hasCookies: !!req.cookies,
+        hasHeaders: !!req.headers,
+        cookieKeys: req.cookies ? Object.keys(req.cookies) : '不明',
+        headerKeys: req.headers ? Array.from(req.headers.keys ? req.headers.keys() : Object.keys(req.headers)) : '不明'
+      });
+      throw new Error('認証トークンが見つかりません。再ログインしてください。');
+    }
 
-  try {
-    const decoded = jwt.verify(token, SECRET);
-    console.log('🔑 トークン検証成功:', decoded.role, decoded.email);
+    // トークンを検証
+    const decoded = verifyToken(token);
+    
+    console.log(`✅ 認証成功: ${decoded.email} (${decoded.role})`);
     return decoded;
-  } catch (err) {
-    console.error('🔑 トークン検証エラー:', err.message);
-    console.error('🔑 JWT_SECRETが環境変数に設定されているか:', process.env.JWT_SECRET ? 'はい' : 'いいえ'); // より具体的なデバッグ
-    throw new Error('無効な認証トークンです');
+
+  } catch (error) {
+    console.error('❌ 認証エラー:', error.message);
+    console.log('リクエスト詳細:', {
+      url: req.url,
+      method: req.method,
+      hasToken: !!token,
+      tokenPreview: token ? token.substring(0, 20) + '...' : 'なし'
+    });
+    throw error;
   }
+}
+
+/**
+ * Next.js App Routerでのサーバーサイド認証ヘルパー
+ * Server ComponentsやRoute Handlersで使用
+ */
+export async function getServerAuthUser(req) {
+  try {
+    return verifyTokenFromCookie(req);
+  } catch (error) {
+    console.log('サーバーサイド認証失敗:', error.message);
+    return null;
+  }
+}
+
+/**
+ * 認証が必要なServer Componentで使用するヘルパー
+ */
+export async function requireAuth(req, allowedRoles = []) {
+  const user = verifyTokenFromCookie(req);
+  
+  if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
+    throw new Error(`この操作には${allowedRoles.join('または')}の権限が必要です`);
+  }
+  
+  return user;
 }

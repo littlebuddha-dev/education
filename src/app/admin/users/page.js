@@ -1,144 +1,148 @@
 // src/app/admin/users/page.js
-// タイトル: 管理者向けユーザー管理ページ（認証ロジック修正版）
-// 役割: システムに登録されている全ユーザーの管理を行います。
-//       [修正] useAuthGuardからuseAuthに変更し、Contextから直接認証状態を取得するように修正しました。
-
+// シンプル版：エラーが起きにくい最小構成
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext'; // [修正] useAuthGuardからuseAuthに変更
+import { useAuth } from '@/context/AuthContext';
 
 export default function AdminUsersPage() {
   const router = useRouter();
-  const { user, isAuthenticated, isLoading: isAuthLoading } = useAuth(); // [修正] useAuthから状態を取得
+  const { user, isAuthenticated, isLoading } = useAuth();
   const [users, setUsers] = useState([]);
   const [error, setError] = useState('');
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // 認証状態の読み込みが完了するまで待つ
-    if (isAuthLoading) {
+    if (isLoading) return; // 認証状態の読み込み待ち
+
+    if (!isAuthenticated || !user) {
+      setError('ログインが必要です');
+      router.push('/login');
       return;
     }
 
-    // 認証されていない、またはロールがadminでない場合はエラー表示
-    if (!isAuthenticated || !user || user.role !== 'admin') {
-      setError('アクセス権限がありません。このページは管理者専用です。');
-      // 必要であればログインページにリダイレクト
-      // setTimeout(() => router.replace('/login'), 2000);
+    if (user.role !== 'admin') {
+      setError('管理者権限が必要です');
       return;
     }
 
-    // 認証情報（トークン）を取得してユーザー一覧をフェッチ
-    const token = document.cookie.split('; ').find(row => row.startsWith('token='))?.split('=')[1];
-    if (token) {
-      fetchUsers(token);
-    } else {
-      setError("認証トークンが見つかりません。再ログインしてください。");
-    }
-  }, [isAuthenticated, user, isAuthLoading, router]);
+    // ユーザー一覧を取得
+    fetchUsers();
+  }, [isAuthenticated, user, isLoading, router]);
 
-  const fetchUsers = async (token) => {
-    setError('');
+  const fetchUsers = async () => {
     try {
-      const res = await fetch('/api/admin/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
+      setLoading(true);
+      setError('');
+      
+      console.log('🚀 フロントエンド: ユーザー一覧取得開始');
+      
+      const response = await fetch('/api/admin/users', {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'ユーザー一覧の取得に失敗しました');
+
+      console.log('📡 フロントエンド: レスポンス受信', {
+        status: response.status,
+        ok: response.ok,
+        statusText: response.statusText
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ フロントエンド: APIエラー', errorText);
+        throw new Error(`API エラー: ${response.status} ${errorText}`);
       }
-      setUsers(data);
+
+      const data = await response.json();
+      console.log('✅ フロントエンド: データ取得成功', data);
+      
+      setUsers(Array.isArray(data) ? data : []);
+      
     } catch (err) {
-      console.error('管理者ユーザー一覧取得エラー:', err);
-      setError(err.message);
+      console.error('❌ フロントエンド: fetchUsers エラー', err);
+      setError(`ユーザー一覧の取得に失敗しました: ${err.message}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const toggleSelect = (id) => {
-    if (user && id === user.id) {
-        alert("管理者自身を削除対象に含めることはできません。");
-        return;
-    }
-    setSelectedIds(prev =>
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
-  };
-
-  const deleteSelected = async () => {
-    // ... (削除ロジックは変更なし)
-  };
-
-  // 認証情報の読み込み中はローディング表示
-  if (isAuthLoading) {
-    return <main style={{ padding: '2rem' }}><p>認証情報を確認中...</p></main>;
+  if (isLoading) {
+    return <div style={{padding: '2rem'}}>認証状態を確認中...</div>;
   }
 
-  // エラーがある場合はエラーメッセージを表示
   if (error) {
-    return <main style={{ padding: '2rem' }}><p style={{ color: 'red' }}>{error}</p></main>;
+    return (
+      <div style={{padding: '2rem'}}>
+        <h1>管理者 - ユーザー管理</h1>
+        <div style={{color: 'red', padding: '1rem', border: '1px solid red', marginTop: '1rem'}}>
+          ❌ {error}
+        </div>
+        <button onClick={() => router.push('/login')} style={{marginTop: '1rem'}}>
+          ログインページへ
+        </button>
+        <button onClick={fetchUsers} style={{marginTop: '1rem', marginLeft: '1rem'}}>
+          再試行
+        </button>
+      </div>
+    );
   }
-  
-  // 正常にレンダリング
+
   return (
-    <main style={{ padding: '2rem' }}>
+    <div style={{padding: '2rem'}}>
       <h1>管理者 - ユーザー管理</h1>
       
-      <div style={{ marginBottom: '1rem' }}>
-        <button onClick={() => router.push('/users/register')} style={{ marginRight: '1rem' }}>
-          新規ユーザー登録
+      <div style={{marginBottom: '1rem'}}>
+        <button onClick={fetchUsers} disabled={loading}>
+          {loading ? '読み込み中...' : 'ユーザー一覧を更新'}
         </button>
-        {selectedIds.length > 0 && (
-          <button onClick={deleteSelected} style={{ backgroundColor: 'red', color: 'white' }}>
-            選択したユーザーを削除 ({selectedIds.length})
-          </button>
-        )}
       </div>
 
-      <table border="1" cellPadding="8" style={{ borderCollapse: 'collapse', width: '100%' }}>
-        <thead>
-          <tr>
-            <th>選択</th>
-            <th style={{fontSize: '0.8em'}}>ID</th>
-            <th>Email</th>
-            <th>姓</th>
-            <th>名</th>
-            <th>役割</th>
-            <th>登録日</th>
-            <th>子どもの数</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.id}>
-              <td>
-                <input
-                  type="checkbox"
-                  checked={selectedIds.includes(u.id)}
-                  onChange={() => toggleSelect(u.id)}
-                  disabled={user && u.id === user.id}
-                />
-              </td>
-              <td style={{ fontSize: '0.8em', wordBreak: 'break-all' }}>{u.id}</td>
-              <td>{u.email}</td>
-              <td>{u.first_name || '-'}</td>
-              <td>{u.last_name || '-'}</td>
-              <td>{u.role}</td>
-              <td>{new Date(u.created_at).toLocaleDateString()}</td>
-              <td style={{textAlign: 'center'}}>{u.children_count || 0}</td>
-              <td>
-                {u.role === 'parent' || (u.role === 'child' && (u.children_count || 0) > 0) ? (
-                   <button onClick={() => router.push(`/admin/users/skills?id=${u.id}`)}>
-                     スキル統計
-                   </button>
-                ) : '-'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </main>
+      {loading ? (
+        <p>ユーザー一覧を読み込み中...</p>
+      ) : users.length === 0 ? (
+        <p>ユーザーが見つかりません</p>
+      ) : (
+        <div>
+          <p>ユーザー数: {users.length}</p>
+          <table border="1" style={{width: '100%', borderCollapse: 'collapse'}}>
+            <thead>
+              <tr>
+                <th style={{padding: '8px'}}>Email</th>
+                <th style={{padding: '8px'}}>名前</th>
+                <th style={{padding: '8px'}}>役割</th>
+                <th style={{padding: '8px'}}>登録日</th>
+                <th style={{padding: '8px'}}>子どもの数</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id}>
+                  <td style={{padding: '8px'}}>{u.email}</td>
+                  <td style={{padding: '8px'}}>{u.first_name} {u.last_name}</td>
+                  <td style={{padding: '8px'}}>{u.role}</td>
+                  <td style={{padding: '8px'}}>{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td style={{padding: '8px', textAlign: 'center'}}>{u.children_count || 0}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* デバッグ情報 */}
+      <div style={{marginTop: '2rem', padding: '1rem', backgroundColor: '#f5f5f5', fontSize: '0.8em'}}>
+        <h3>🔍 デバッグ情報</h3>
+        <p>認証状態: {isAuthenticated ? '✅ 認証済み' : '❌ 未認証'}</p>
+        <p>ユーザー: {user?.email} ({user?.role})</p>
+        <p>ユーザー数: {users.length}</p>
+        <p>エラー: {error || 'なし'}</p>
+        <p>ローディング: {loading ? 'はい' : 'いいえ'}</p>
+      </div>
+    </div>
   );
 }
