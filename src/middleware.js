@@ -1,7 +1,6 @@
 // src/middleware.js
-// タイトル: 認証ミドルウェア（最終確定版）
-// 役割: サーバーサイドで全リクエストのアクセス制御を確実に行います。
-
+// タイトル: 認証ミドルウェア
+// 役割: サーバーサイドで全リクエストのアクセス制御を確実に行う。
 import { NextResponse } from 'next/server';
 import { isPublicPath, isAdminPath } from '@/lib/authConfig';
 
@@ -13,6 +12,7 @@ function validateTokenPayload(token) {
     // トークンの有効期限をチェック
     return payload.exp && now < payload.exp ? payload : null;
   } catch (e) {
+    console.error("Token validation error in middleware:", e.message);
     return null;
   }
 }
@@ -31,10 +31,10 @@ export function middleware(request) {
 
   // 【ケース1】認証済みユーザー
   if (userPayload) {
-    // ログインページにアクセスしようとしたら、ダッシュボードにリダイレクト
-    if (pathname === '/login' || pathname === '/users/register') {
-      const targetUrl = new URL(userPayload.role === 'admin' ? '/admin/users' : '/children', request.url);
-      return NextResponse.redirect(targetUrl);
+    // ログインページにアクセスしようとしたら、役割に応じたダッシュボードにリダイレクト
+    if (pathname === '/login' || pathname === '/users/register' || pathname === '/setup') {
+      const targetPath = userPayload.role === 'admin' ? '/admin/users' : userPayload.role === 'parent' ? '/children' : '/chat';
+      return NextResponse.redirect(new URL(targetPath, request.url));
     }
     // 管理者以外のユーザーが管理者ページにアクセスしようとしたら、トップページにリダイレクト
     if (isAdminPath(pathname) && userPayload.role !== 'admin') {

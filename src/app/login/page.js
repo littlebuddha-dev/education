@@ -1,11 +1,11 @@
 // src/app/login/page.js
-// 修正版：遅延付きのrouter.pushでリダイレクト
+// タイトル: ログインページ（強制リロード版）
+// 役割: ログイン成功後、ページをフルリロードして状態の不整合を解消する。
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { setAuthCookie } from '@/utils/authUtils';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,19 +13,24 @@ export default function LoginPage() {
   const { login, isAuthenticated, user, isLoading: authLoading } = useAuth();
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // 【最重要修正点】認証状態がtrueになったら、ページをフルリロードしてリダイレクト
   useEffect(() => {
     if (!authLoading && isAuthenticated && user) {
+      const redirectTo = searchParams.get('redirectTo');
       const DASHBOARD_PATHS = {
         admin: '/admin/users',
         parent: '/children',
         child: '/chat',
       };
       const defaultPath = DASHBOARD_PATHS[user.role] || '/';
-      router.replace(defaultPath);
+      const targetPath = redirectTo || defaultPath;
+      
+      // router.replaceの代わりにwindow.location.hrefを使い、ページを強制的に再読み込みさせる
+      window.location.href = targetPath;
     }
-  }, [isAuthenticated, user, authLoading, router]);
+  }, [isAuthenticated, user, authLoading, searchParams]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -36,19 +41,12 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
-
-    if (!formData.email || !formData.password) {
-      setError('メールアドレスとパスワードを入力してください');
-      setIsLoading(false);
-      return;
-    }
+    setIsSubmitting(true);
 
     try {
       const response = await fetch('/api/users/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({
           email: formData.email.toLowerCase().trim(),
           password: formData.password,
@@ -59,35 +57,18 @@ export default function LoginPage() {
       if (!response.ok) throw new Error(data.error || 'ログインに失敗しました');
       if (!data.token) throw new Error('認証トークンが取得できませんでした');
       
-      // Cookie設定はAPIのSet-Cookieに任せる
+      // AuthContextの状態を更新する（この後のリロードで再構築されるが、念のため）
       await login(data.token, data.user);
-      
-      console.log('ログイン成功、遅延後にリダイレクトします...');
-      
-      const DASHBOARD_PATHS = {
-        admin: '/admin/users',
-        parent: '/children',
-        child: '/chat',
-      };
-      const redirectTo = searchParams.get('redirectTo');
-      const defaultPath = DASHBOARD_PATHS[data.user.role] || '/';
-      const targetPath = redirectTo || defaultPath;
-      
-      // 🔧 修正: router.push を使い、100msの遅延を設けてCookie同期の問題を回避
-      setTimeout(() => {
-        router.push(targetPath);
-      }, 100);
 
     } catch (err) {
       console.error('ログインエラー:', err);
       setError(err.message);
-    } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
   
-  // (以降のreturn文は変更なし)
-  if (authLoading || (isAuthenticated && user)) {
+  // 認証チェック中やリダイレクト待機中はローディング表示
+  if (authLoading || isAuthenticated) {
     return (
       <main style={{ padding: '2rem', textAlign: 'center' }}>
         <p>認証状態を確認中...</p>
@@ -102,14 +83,14 @@ export default function LoginPage() {
       <form onSubmit={handleSubmit}>
         <div style={{ marginBottom: '1rem' }}>
           <label style={{ display: 'block', marginBottom: '0.5rem' }}>メールアドレス:</label>
-          <input type="email" name="email" value={formData.email} onChange={handleInputChange} required disabled={isLoading} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }} />
+          <input type="email" name="email" value={formData.email} onChange={handleInputChange} required disabled={isSubmitting} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }} />
         </div>
         <div style={{ marginBottom: '1.5rem' }}>
           <label style={{ display: 'block', marginBottom: '0.5rem' }}>パスワード:</label>
-          <input type="password" name="password" value={formData.password} onChange={handleInputChange} required disabled={isLoading} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }} />
+          <input type="password" name="password" value={formData.password} onChange={handleInputChange} required disabled={isSubmitting} style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', fontSize: '16px' }} />
         </div>
-        <button type="submit" disabled={isLoading} style={{ width: '100%', padding: '0.75rem', backgroundColor: isLoading ? '#ccc' : '#0070f3', color: 'white', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: isLoading ? 'not-allowed' : 'pointer' }}>
-          {isLoading ? 'ログイン中...' : 'ログイン'}
+        <button type="submit" disabled={isSubmitting} style={{ width: '100%', padding: '0.75rem', backgroundColor: isSubmitting ? '#ccc' : '#0070f3', color: 'white', border: 'none', borderRadius: '4px', fontSize: '16px', cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
+          {isSubmitting ? 'ログイン中...' : 'ログイン'}
         </button>
       </form>
       <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
