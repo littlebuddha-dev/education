@@ -1,148 +1,78 @@
-// src/utils/authUtils.js - localStorage使用版（緊急回避策）
-// Cookieから値を取り出す関数（localStorageフォールバック付き）
+// src/utils/authUtils.js
+// タイトル: 認証ユーティリティ (Cookie特化版)
+// 役割: クライアントサイドでの認証Cookieの操作（取得、設定、削除）を一元管理します。localStorageへのフォールバックを廃止し、Cookieに一本化しました。
+
+/**
+ * Cookieから指定された名前の値を取得します。
+ * @param {string} name - 取得したいCookieの名前
+ * @returns {string | null} Cookieの値。存在しない場合はnull。
+ */
 export function getCookie(name) {
   if (typeof document === 'undefined') {
-    console.log('🍪 getCookie: サーバーサイドのため何も返さない');
-    return null;
+    return null; // サーバーサイドでは何もしない
   }
-  
-  // まずCookieを試行
   const allCookies = document.cookie;
-  console.log('🍪 getCookie: 全Cookie:', allCookies);
-  
-  const regex = new RegExp('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+  const regex = new RegExp(`(^|;)\\s*${name}\\s*=\\s*([^;]+)`);
   const match = allCookies.match(regex);
-  
-  if (match && match[2]) {
-    console.log('🍪 getCookie: Cookieから取得成功');
-    return match[2];
-  }
-  
-  // Cookieで取得できない場合はlocalStorageを使用
-  console.log('🍪 getCookie: Cookieで取得失敗、localStorageを確認');
-  try {
-    const tokenFromStorage = localStorage.getItem(name);
-    if (tokenFromStorage) {
-      console.log('🍪 getCookie: localStorageから取得成功');
-      return tokenFromStorage;
-    }
-  } catch (err) {
-    console.error('🍪 getCookie: localStorage取得エラー:', err);
-  }
-  
-  console.log('🍪 getCookie: 両方で取得失敗');
-  return null;
+  return match ? match[2] : null;
 }
 
-// トークンをセットする関数（Cookie + localStorage）
+/**
+ * 認証トークンをCookieに設定します。
+ * @param {string} token - 設定するJWT
+ */
 export function setAuthCookie(token) {
   if (typeof document === 'undefined') {
-    console.log('🍪 setAuthCookie: サーバーサイドのため何もしない');
-    return;
+    return; // サーバーサイドでは何もしない
   }
-  
-  console.log('🍪 setAuthCookie: トークン設定開始:', token.substring(0, 20) + '...');
-  
-  // 1. localStorageに保存（確実）
-  try {
-    localStorage.setItem('token', token);
-    console.log('🍪 setAuthCookie: localStorage保存成功');
-  } catch (err) {
-    console.error('🍪 setAuthCookie: localStorage保存エラー:', err);
-  }
-  
-  // 2. Cookieにも保存を試行
   const maxAge = 7 * 24 * 60 * 60; // 7日間（秒）
-  const isLocalhost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-  
-  let cookieString;
-  if (isLocalhost) {
-    cookieString = `token=${token}; path=/; max-age=${maxAge}`;
-  } else {
-    const isSecure = location.protocol === 'https:';
-    cookieString = `token=${token}; path=/; max-age=${maxAge}; SameSite=Lax${isSecure ? '; Secure' : ''}`;
-  }
-  
-  try {
-    document.cookie = cookieString;
-    console.log('🍪 setAuthCookie: Cookie設定実行');
-  } catch (err) {
-    console.error('🍪 setAuthCookie: Cookie設定エラー:', err);
-  }
-  
-  // 設定確認
-  setTimeout(() => {
-    const tokenCheck = getCookie('token');
-    console.log('🍪 setAuthCookie: 設定確認:', tokenCheck ? '成功' : '失敗');
-  }, 100);
+  const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+  // localhostでない場合、またはセキュアな接続の場合はSecureフラグを付与
+  const isSecure = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const secureFlag = !isLocalhost || isSecure ? '; Secure' : '';
+
+  document.cookie = `token=${token}; path=/; max-age=${maxAge}; SameSite=Lax${secureFlag}`;
 }
 
-// トークンを削除する関数（Cookie + localStorage）
+
+/**
+ * 認証トークンのCookieを削除します。
+ */
 export function removeAuthCookie() {
   if (typeof document === 'undefined') {
-    console.log('🍪 removeAuthCookie: サーバーサイドのため何もしない');
-    return;
+    return; // サーバーサイドでは何もしない
   }
-  
-  console.log('🍪 removeAuthCookie: トークン削除開始');
-  
-  // 1. localStorageから削除
-  try {
-    localStorage.removeItem('token');
-    console.log('🍪 removeAuthCookie: localStorage削除成功');
-  } catch (err) {
-    console.error('🍪 removeAuthCookie: localStorage削除エラー:', err);
-  }
-  
-  // 2. Cookieからも削除
-  const deleteMethods = [
-    'token=; Max-Age=0; path=/',
-    'token=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/',
-    'token='
-  ];
-  
-  deleteMethods.forEach((method) => {
-    try {
-      document.cookie = method;
-    } catch (err) {
-      console.error('🍪 removeAuthCookie: Cookie削除エラー:', err);
-    }
-  });
-  
-  setTimeout(() => {
-    const verification = getCookie('token');
-    console.log('🍪 removeAuthCookie: 削除確認:', verification ? '失敗' : '成功');
-  }, 100);
+  // Cookieを過去の日付に設定して削除
+  document.cookie = 'token=; Max-Age=0; path=/;';
 }
 
-// トークンの有効性をチェックする関数
+/**
+ * Cookieに保存されたトークンの有効期限をチェックします。
+ * @returns {boolean} トークンが有効な場合はtrue、それ以外はfalse。
+ */
 export function isTokenValid() {
   const token = getCookie('token');
   if (!token) {
-    console.log('🍪 isTokenValid: トークンなし');
     return false;
   }
-  
+
   try {
     const parts = token.split('.');
     if (parts.length !== 3) {
-      console.log('🍪 isTokenValid: JWT形式エラー');
+      console.error('Invalid JWT format');
       return false;
     }
-    
     const payload = JSON.parse(atob(parts[1]));
-    
+
     if (payload.exp && Date.now() >= payload.exp * 1000) {
-      console.log('🍪 isTokenValid: トークンが期限切れ');
-      removeAuthCookie();
+      removeAuthCookie(); // 期限切れのトークンは削除
       return false;
     }
-    
-    console.log('🍪 isTokenValid: トークン有効');
     return true;
   } catch (err) {
-    console.error('🍪 isTokenValid: トークン検証エラー:', err);
-    removeAuthCookie();
+    console.error('Token validation error:', err);
+    removeAuthCookie(); // 不正なトークンは削除
     return false;
   }
 }
