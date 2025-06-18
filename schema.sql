@@ -1,4 +1,5 @@
--- schema.sql
+-- /schema.sql
+-- 役割: データベースのテーブル定義。リフレッシュトークンを管理するテーブルを追加。
 
 -- users テーブル
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -10,32 +11,38 @@ CREATE TABLE IF NOT EXISTS users (
     first_name VARCHAR(255),
     last_name VARCHAR(255),
     role VARCHAR(50) DEFAULT 'parent' NOT NULL,
-    birthday DATE, -- 💡 追加: users テーブルに birthday カラム
+    birthday DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- children テーブル
--- ここでは、子どもの詳細プロフィール情報と、保護者への紐付けを管理します。
--- user_id が NULL の場合、その子どもは親アカウントに紐付いていない独立した学習者アカウントとみなされます。
 CREATE TABLE IF NOT EXISTS children (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL, -- ✅ 修正: NULL を許容する (保護者に紐付けられていない場合)
+    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     name VARCHAR(255) NOT NULL,
-    birthday DATE, -- 💡 追加: children テーブルにも birthday カラムがあることを確認
+    birthday DATE,
     gender VARCHAR(50),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    -- ✅ 追加: 子どものユーザーIDを直接紐付ける (自身がusersテーブルに登録された子どもの場合)
-    -- これにより、childrenテーブルのレコードが独立した子供アカウントと、保護者管理下の子供の双方に対応できるようにする
     child_user_id UUID UNIQUE REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- ✅【新規追加】リフレッシュトークン管理テーブル
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    is_revoked BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- conversation_logs テーブル
 CREATE TABLE IF NOT EXISTS conversation_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- 会話したユーザーID (child_user_id または parent_user_id)
-    role VARCHAR(50) NOT NULL, -- 'user' or 'assistant'
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role VARCHAR(50) NOT NULL,
     message TEXT NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -43,9 +50,9 @@ CREATE TABLE IF NOT EXISTS conversation_logs (
 -- evaluation_logs テーブル
 CREATE TABLE IF NOT EXISTS evaluation_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, -- 評価対象のユーザーID（ここでは会話した子ども）
-    child_id UUID REFERENCES children(id) ON DELETE CASCADE, -- 修正: CASCADE に変更。childrenテーブルのレコードが削除されたら評価も削除
-    conversation_id UUID REFERENCES conversation_logs(id) ON DELETE SET NULL, -- 会話ログが削除されても評価は残る
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    child_id UUID REFERENCES children(id) ON DELETE CASCADE,
+    conversation_id UUID REFERENCES conversation_logs(id) ON DELETE SET NULL,
     subject VARCHAR(255),
     domain VARCHAR(255),
     level VARCHAR(255),
@@ -55,7 +62,6 @@ CREATE TABLE IF NOT EXISTS evaluation_logs (
 );
 
 -- skill_scores テーブル (ユーザーごとの総合スキルスコア)
--- ここで user_id は学習者（親または子）のusers.id
 CREATE TABLE IF NOT EXISTS skill_scores (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -69,7 +75,6 @@ CREATE TABLE IF NOT EXISTS skill_scores (
 );
 
 -- skill_logs テーブル (詳細なスキル記録)
--- ここで child_id は childrenテーブルのid
 CREATE TABLE IF NOT EXISTS skill_logs (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     child_id UUID NOT NULL REFERENCES children(id) ON DELETE CASCADE,
@@ -110,7 +115,8 @@ CREATE TABLE IF NOT EXISTS child_learning_progress (
 -- インデックスの追加（パフォーマンス向上のため）
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_children_user_id ON children(user_id);
-CREATE INDEX IF NOT EXISTS idx_children_child_user_id ON children(child_user_id); -- ✅ 追加
+CREATE INDEX IF NOT EXISTS idx_children_child_user_id ON children(child_user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id); -- ✅ 追加
 CREATE INDEX IF NOT EXISTS idx_conversation_logs_user_id ON conversation_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_evaluation_logs_user_id ON evaluation_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_evaluation_logs_child_id ON evaluation_logs(child_id);
