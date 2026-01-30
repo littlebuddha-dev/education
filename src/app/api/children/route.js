@@ -1,7 +1,7 @@
-// /src/app/api/children/route.js
-// 役割: 子どもの登録(POST)と一覧取得(GET) API（新スキーマ完全対応・インポート修正版）
+// src/app/api/children/route.js
+// 役割: 子どもの登録(POST)と一覧取得(GET) API
+// 修正: フロントエンドからのパラメータ名(name/displayName)の揺らぎを吸収し、バリデーションエラーを解消
 
-// ▼▼▼ `query` をインポートに追加 ▼▼▼
 import { getClient, beginTransaction, commitTransaction, rollbackTransaction, releaseClient, query } from '@/lib/db';
 import { verifyAccessTokenFromHeader } from '@/lib/auth';
 import { createUser } from '@/repositories/userRepository';
@@ -9,7 +9,7 @@ import { createChildProfile, createParentChildRelationship } from '@/repositorie
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 
-// [POST] 新しい子どもを登録する (新ロジック)
+// [POST] 新しい子どもを登録する
 export async function POST(req) {
   const client = await getClient();
   try {
@@ -18,74 +18,99 @@ export async function POST(req) {
     if (parentUser.role !== 'parent') {
       return Response.json({ error: '保護者のみ操作可能です' }, { status: 403 });
     }
-    // ★ POST側では display_name ではなく、フォームから渡される想定の name を使う
-    // ★ フロントエンドのフォームも後で display_name に合わせる必要があります
-    const { name, gender, birthday } = await req.json();
 
+    const body = await req.json();
+    
+    // デバッグ用ログ: フロントエンドから何が送られてきているか確認
+    console.log('[API/children] Received body:', body);
+
+    // ✅ 修正ポイント: パラメータの揺らぎを吸収 (name, displayName, display_name いずれも許容)
+    // フロントエンドがどのキーで送ってきても対応できるようにする
+    const name = body.name || body.displayName || body.display_name;
+    const gender = body.gender;
+    const birthday = body.birthday;
+
+    // バリデーション
     if (!name || !gender || !birthday) {
-      return Response.json({ error: '名前、性別、誕生日は必須です。' }, { status: 400 });
+      console.error('[API/children] Validation Error:', { name, gender, birthday });
+      return Response.json({ 
+        error: '名前、性別、誕生日は必須です。',
+        received: { name, gender, birthday } 
+      }, { status: 400 });
     }
     
     await beginTransaction(client);
 
     // --- 1. 子ども用のユーザーアカウントを自動生成 ---
-    const childEmail = `${uuidv4()}@child.local`;
-    const tempPassword = uuidv4();
-    const password_hash = await bcrypt.hash(tempPassword, 10);
-    
+    // メールアドレスはユニークである必要があるためUUIDを使用
+    const childEmail = `${uuidv4()}@placeholder.com`;
+    // パスワードは仮のもの（ログインには使わない前提だがDB制約のため必要）
+    const tempPassword = uuidv4(); 
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+
     const childUser = await createUser(client, {
       email: childEmail,
-      password_hash,
-      first_name: name, // フォームからの name を使用
-      last_name: '(子ども)',
+      password_hash: passwordHash,
       role: 'child',
-      birthday,
+      first_name: name, // ユーザーテーブルのfirst_nameにも入れておく
+      last_name: ''     // last_nameは空でも許容する設計とする
     });
-    
-    // --- 2. 子どもプロフィールを作成 ---
+
+    // --- 2. 子どもプロフィール作成 ---
+    // childrenテーブルの display_name にマッピング
     const childProfile = await createChildProfile(client, {
       user_id: childUser.id,
-      display_name: name, // フォームからの name を display_name として使用
-      birthday,
-      gender,
+      display_name: name, // display_nameとして保存
+      gender: gender,
+      birthday: birthday
     });
-    
-    // --- 3. 保護者と子どもの関係を作成 ---
+
+    // --- 3. 親子関係の作成 (parent_child_relationships) ---
     await createParentChildRelationship(client, {
       parent_user_id: parentUser.id,
       child_user_id: childUser.id,
-      created_by: parentUser.id,
+      relationship_type: 'parent', // デフォルト値
+      status: 'active'
     });
 
     await commitTransaction(client);
-    
-    return Response.json(childProfile);
 
-  } catch (err) {
-    if (client) await rollbackTransaction(client);
-    if (err.message.includes('token') || err.message.includes('Authorization')) {
-        return Response.json({ error: `認証エラー: ${err.message}` }, { status: 401 });
-    }
-    console.error('子ども登録エラー:', err);
-    return Response.json({ error: '子どもの登録に失敗しました。' }, { status: 500 });
+    return Response.json({
+      message: '子どもの登録が完了しました',
+      child: {
+        id: childProfile.id,
+        userId: childUser.id,
+        displayName: childProfile.display_name
+      }
+    }, { status: 201 });
+
+  } catch (error) {
+    await rollbackTransaction(client);
+    console.error('Child registration error:', error);
+    return Response.json({ error: '登録処理中にエラーが発生しました: ' + error.message }, { status: 500 });
   } finally {
-    if (client) releaseClient(client);
+    releaseClient(client);
   }
 }
 
-
-// [GET] 子どもの一覧または詳細を取得する (新ロジック)
+// [GET] 子ども一覧を取得する
 export async function GET(req) {
   try {
     const user = verifyAccessTokenFromHeader(req);
-
-    let queryText;
+    let queryText = '';
     let queryParams = [user.id];
 
     if (user.role === 'parent') {
-      // 保護者の場合、関連付けられた子ども一覧を取得
+      // 親の場合、紐づいている子ども一覧を取得（parent_child_relationships経由）
       queryText = `
-        SELECT c.id, c.user_id, c.display_name, c.birthday, c.gender, pcr.relationship_type
+        SELECT 
+          c.id, 
+          c.user_id, 
+          c.display_name, 
+          c.birthday, 
+          c.gender, 
+          c.created_at, 
+          c.updated_at
         FROM children c
         JOIN parent_child_relationships pcr ON c.user_id = pcr.child_user_id
         WHERE pcr.parent_user_id = $1 AND pcr.status = 'active'
@@ -99,7 +124,7 @@ export async function GET(req) {
         WHERE user_id = $1;
       `;
     } else if (user.role === 'admin') {
-      // 管理者の場合、すべての子ども一覧を取得（★親の情報もJOINして取得）
+      // 管理者の場合、すべての子ども一覧を取得（親の情報もJOINして取得）
       queryText = `
         SELECT 
           c.id, 
@@ -120,13 +145,22 @@ export async function GET(req) {
     }
     
     const result = await query(queryText, queryParams);
-    return Response.json(result.rows);
+    
+    // フロントエンドで扱いやすい形式（キャメルケース）に変換して返す
+    const formattedRows = result.rows.map(row => ({
+      id: row.id,
+      userId: row.user_id,
+      displayName: row.display_name,
+      birthday: row.birthday,
+      gender: row.gender,
+      createdAt: row.created_at,
+      parentEmail: row.parent_email // admin用
+    }));
 
-  } catch (err) {
-    if (err.message.includes('token') || err.message.includes('Authorization')) {
-        return Response.json({ error: `認証エラー: ${err.message}` }, { status: 401 });
-    }
-    console.error('子ども一覧/詳細取得エラー API:', err);
-    return Response.json({ error: '一覧/詳細取得に失敗しました' }, { status: 500 });
+    return Response.json(formattedRows);
+
+  } catch (error) {
+    console.error('Fetch children error:', error);
+    return Response.json({ error: 'データ取得中にエラーが発生しました' }, { status: 500 });
   }
 }

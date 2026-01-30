@@ -1,160 +1,139 @@
-# **教育AIシステム**
+# **Education AI System \- 開発環境セットアップガイド**
 
-このプロジェクトは、AIチャット機能を中心に、子どものアカデミックな能力向上を支援し、教育スケジュールに基づいて学習をナビゲートする堅牢な教育AIシステムです。保護者は子どもとのチャットを通じて学習をサポートし、子どもの学習履歴やスキル評価を管理できます。管理者は、システム全体のユーザーと学習データを効率的に管理するための機能を利用できます。
+このプロジェクトは、子どもの成長と学習を支援する教育AIシステムのプロトタイプです。
 
-## **✨ 主要技術スタック**
+**Next.js (App Router)** と **PostgreSQL** を使用しています。
 
-| カテゴリ | 技術 |
-| :---- | :---- |
-| **フロントエンド** | Next.js (App Router), React |
-| **バックエンド** | Next.js API Routes (Node.js) |
-| **データベース** | PostgreSQL |
-| **AI/LLM連携** | Ollama, OpenAI, Gemini, Claude (src/lib/llmRouter.jsで選択) |
-| **認証** | JWT (JSON Web Tokens) with Refresh Token (Cookie-based) |
-| **セキュリティ** | bcrypt (パスワードハッシュ), zod (入力値検証) |
-| **テスト** | Jest, React Testing Library |
+初見の方でも以下の手順通りに進めれば、約5〜10分で開発環境を立ち上げることができます。
 
-## **🚀 開発環境のセットアップ**
+## **✅ 前提条件 (Prerequisites)**
 
-このセクションでは、ローカルマシンで開発環境を構築する手順を詳しく説明します。
+開発を始める前に、以下のツールがインストールされていることを確認してください。
 
-### **1\. 前提条件**
+* **Node.js**: v18系 または v20系 (LTS推奨)  
+* **Docker Desktop**: データベースを起動するために必須です。
 
-* **Node.js**: v18.18.0 以上  
-* **npm**: v9.0.0 以上  
-* **PostgreSQL**: v14 以上  
-* **Git**
+## **🚀 クイックスタート (Quick Start)**
 
-### **2\. プロジェクトのクローンと依存関係のインストール**
+ターミナルを開き、プロジェクトのルートディレクトリで以下のコマンドを順番に実行してください。
 
-まず、プロジェクトをローカルにクローンし、必要なnpmパッケージをインストールします。
+### **Step 1\. 依存パッケージのインストール**
 
-\# 1\. リポジトリをクローン  
-git clone \<あなたのリポジトリURL\>  
-cd \<リポジトリ名\>
+まずはプロジェクトに必要なライブラリをインストールします。
 
-\# 2\. 依存関係をインストール  
 npm install
 
-### **3\. 環境変数の設定**
+### **Step 2\. 環境変数の設定**
 
-次に、アプリケーションの動作に必要な環境変数を設定します。
+設定ファイルを作成します。.env.local ではなく、Docker連携のために **.env** を使用するのがポイントです。
 
-1. プロジェクトのルートにある env.local.sample ファイルをコピーして、.env.local という名前の新しいファイルを作成します。  
-   cp env.local.sample .env.local
+\# サンプルをコピーして .env を作成  
+cp env.local.sample .env
 
-2. .env.local ファイルを開き、お使いの環境に合わせて各値を設定します。  
-   \# PostgreSQL データベース接続情報  
-   PGHOST=localhost  
-   PGPORT=5432  
-   PGUSER=your\_postgres\_user      \# あなたのPostgreSQLユーザー名  
-   PGPASSWORD=your\_postgres\_password  \# あなたのPostgreSQLパスワード  
-   PGDATABASE=education\_db         \# 作成するデータベース名
+作成された .env ファイルを開き、以下の内容になっているか確認してください。
 
-   \# JWT シークレット（必須）  
-   JWT\_SECRET=your\_very\_strong\_jwt\_secret\_key\_here  
-   JWT\_REFRESH\_SECRET=your\_different\_jwt\_refresh\_secret\_key\_here
+**特にポート番号が 5433 になっている点に注意してください（Mac標準のPostgreSQLとの競合回避のため）。**
 
-   \# SETUP\_SECRET\_KEY シークレット（初期セットアップ用）  
-   \# この後の手順で生成したキーを設定します  
-   SETUP\_SECRET\_KEY=your\_setup\_secret\_key\_here
+\# \--- .env ファイルの内容 \---
 
-   \# LLM API キー (使用するLLMに応じて設定)  
-   OPENAI\_API\_KEY=  
-   GEMINI\_API\_KEY=  
-   CLAUDE\_API\_KEY=
+\# データベース設定 (Docker Compose & セットアップスクリプト用)  
+DB\_USER=user  
+DB\_PASSWORD=password  
+DB\_NAME=userdb  
+DB\_HOST=127.0.0.1  
+DB\_PORT=5433
 
-3. **SETUP\_SECRET\_KEY を生成します。** このキーは、最初のシステムセットアップ時にのみ使用する一時的な秘密鍵です。ターミナルで以下のコマンドを実行してください。  
-   node generate-secret.js
+\# Next.js アプリケーション用 (pgライブラリの標準変数)  
+PGHOST=127.0.0.1  
+PGPORT=5433  
+PGUSER=user  
+PGPASSWORD=password  
+PGDATABASE=userdb
 
-4. コマンドを実行すると、ターミナルに新しいキーが出力されます。そのキーをコピーし、.env.local ファイルの SETUP\_SECRET\_KEY= の部分に貼り付けてください。
+\# 認証設定 (開発用ダミーキー)  
+JWT\_SECRET=dev-secret-key-12345  
+JWT\_REFRESH\_SECRET=dev-refresh-secret-67890
 
-### **4\. データベースのセットアップ**
+### **Step 3\. データベースの起動**
 
-アプリケーションが使用するPostgreSQLデータベースとテーブルを準備します。
+Dockerを使ってPostgreSQLデータベースを起動します。
 
-1. PostgreSQLに接続し、ユーザーとデータベースを作成します。  
-   （.env.local で設定した PGUSER と PGDATABASE の値に合わせてください）  
-   \# psqlコマンドでpostgresデータベースに接続  
-   psql postgres
+\# データベースコンテナをバックグラウンドで起動  
+docker compose up \-d db
 
-   \# 以下のSQLコマンドを一行ずつ実行  
-   CREATE USER your\_postgres\_user WITH PASSWORD 'your\_postgres\_password';  
-   CREATE DATABASE education\_db OWNER your\_postgres\_user;  
-   \\q
+実行後、docker ps コマンドで education-db という名前のコンテナが動いていることを確認できます。
 
-2. テーブルスキーマを作成します。  
-   プロジェクトのルートディレクトリで以下のコマンドを実行し、schema.sql ファイルの内容をデータベースに適用します。  
-   psql \-U your\_postgres\_user \-d education\_db \-f schema.sql
+### **Step 4\. データベースの初期化**
 
-   成功すると、NOTICE: \=== 教育AIシステム データベーススキーマ作成完了 \=== というメッセージが表示されます。
+テーブルの作成と初期データ（シードデータ）の投入を行います。
 
-### **5\. 初期データの投入（Seeding）**
+専用のスクリプトが用意されており、複雑な手順を自動化しています。
 
-次に、サンプルユーザーなどの初期データをデータベースに投入します。
+npm run db:setup
 
-1. サンプルユーザー用のパスワードハッシュを生成します。  
-   seed.sql には平文のパスワードを保存できないため、bcrypt でハッシュ化した文字列を生成する必要があります。  
-   ターミナルで以下のコマンドを実行してください。（your\_password の部分を実際のパスワードに置き換えてください）  
-   \# 例: 'adminpassword' というパスワードのハッシュを生成  
-   node hash-password.js adminpassword
+成功すると、以下のようなメッセージが表示されます。
 
-   実行すると、$2b$10$... から始まる長いハッシュ文字列が出力されます。この文字列をコピーしておきます。  
-2. seed.sql ファイルを編集します。  
-   seed.sql ファイルを開き、INSERT INTO users 文の中にあるパスワードハッシュのプレースホルダーを、先ほど生成したハッシュに置き換えます。  
-   \-- (例)  
-   \-- パスワード: adminpassword  
-   INSERT INTO users (email, password\_hash, first\_name, last\_name, role, birthday) VALUES  
-   ('admin@example.com', '【ここに生成したハッシュを貼り付け】', 'システム', '管理者', 'admin', '1980-01-01')  
-   ON CONFLICT (email) DO NOTHING;
+✨ セットアップ完了！
 
-   （他のサンプルユーザーも同様にハッシュを生成・置換してください）  
-3. 初期データを投入します。  
-   編集した seed.sql ファイルを実行して、データをデータベースに挿入します。  
-   psql \-U your\_postgres\_user \-d education\_db \-f seed.sql
+### **Step 5\. アプリケーションの起動**
 
-   成功すると、NOTICE: \=== サンプルデータ投入完了 \=== というメッセージとサンプルアカウント情報が表示されます。
-
-### **6\. 開発サーバーの起動**
-
-全ての準備が整いました。以下のコマンドで開発サーバーを起動します。
+開発サーバーを立ち上げます。
 
 npm run dev
 
-ブラウザで http://localhost:3000 にアクセスしてください。
+ブラウザで [http://localhost:3000](https://www.google.com/search?q=http://localhost:3000) にアクセスしてください。
 
-初回アクセス時は、.env.local で設定した SETUP\_SECRET\_KEY を入力してシステムを初期化するセットアップページが表示されます。管理者アカウントを作成すると、ログインページにリダイレクトされます。
+## **🔑 ログイン情報 (Test Accounts)**
 
-### **7\. テストの実行**
+初期化(db:setup)直後に使えるテスト用アカウントです。
 
-プロジェクトにはテストコードが含まれています。以下のコマンドでテストを実行できます。
+| ロール | メールアドレス | パスワード | 備考 |
+| :---- | :---- | :---- | :---- |
+| **管理者** | admin@example.com | adminpassword | 全データ閲覧可 |
+| **保護者** | apple.darwin@gmail.com | password123 | セットアップ済みデータ |
+| **保護者** | parent1@example.com | parentpassword | 田中太郎 |
+| **子ども** | child1@example.com | childpassword | 田中一郎 |
 
-npm test
+## **🛠 トラブルシューティング**
 
-## **📚 主要機能**
+うまく動かない場合は、以下を確認してください。
 
-* **ユーザー管理**: 保護者・子ども・管理者のロールに基づいたアクセス制御。  
-* **認証システム**: JWTとリフレッシュトークンによるセキュアなセッション管理。  
-* **子ども管理**: 保護者による子どものプロフィール登録と学習状況の確認。  
-* **AIチャット**: LLM（Ollama, OpenAI等）と連携した対話型学習機能。  
-  * **シナリオ分岐**: 通常会話、問題出題、回答評価を自動で判定。  
-  * **自動評価**: 会話内容から子どものスキルを評価し、ログを保存。  
-* **問題集管理**: 管理者による問題の作成・編集・削除機能。  
-* **スキル管理**: AI評価と手動ログによるスキルデータの記録・統計表示。
+### **Q. bind: address already in use エラーが出る**
 
-## **📂 プロジェクト構造**
+**原因:** ポート5432または5433が既に使用されています。
 
-.  
-├── src/  
-│   ├── app/                \# Next.js App Router (ページとAPIルート)  
-│   │   ├── (pages)/        \# 各ページのコンポーネント  
-│   │   └── api/            \# APIエンドポイント  
-│   ├── components/         \# 共通Reactコンポーネント  
-│   ├── context/            \# グローバルな状態管理 (AuthContext)  
-│   ├── lib/                \# 共通ライブラリ (DB接続, 認証, バリデーション等)  
-│   ├── repositories/       \# データベース操作をカプセル化するリポジトリ層  
-│   └── utils/              \# 汎用的なユーティリティ関数  
-├── public/                 \# 静的ファイル  
-├── jest.config.mjs         \# Jestテスト設定  
-├── schema.sql              \# データベースのテーブル定義  
-└── seed.sql                \# 初期データ  
+**対策:** Macで他のPostgreSQLが動いている可能性があります。docker-compose.yml と .env のポート番号を 5434 などに変更して再試行してください。
+
+### **Q. role "user" does not exist エラーが出る**
+
+**原因:** データベースが古い設定のまま残っています。
+
+**対策:** データベースを一度完全に削除して作り直します。
+
+\# コンテナとデータを完全削除  
+docker compose down \-v
+
+\# 再起動  
+docker compose up \-d db
+
+\# 少し待ってから初期化  
+sleep 5  
+npm run db:setup
+
+### **Q. ページが白紙になる、またはリロードを繰り返す**
+
+**原因:** ブラウザに残っている古いCookieが悪さをしている可能性があります。
+
+**対策:** ブラウザのCookieを削除するか、シークレットウィンドウで試してください。
+
+## **📁 主要なディレクトリ構造**
+
+* src/app: Next.js App Routerのページコンポーネント  
+* src/lib: DB接続(db.js)や認証(auth.js)などのコアロジック  
+* src/components: 再利用可能なUIコンポーネント  
+* src/repositories: データベース操作をまとめた層  
+* scripts: DBセットアップ用スクリプト  
+* schema.sql: テーブル定義  
+* seed.sql: 初期データ定義
+
+Enjoy coding\! 🚀

@@ -1,6 +1,6 @@
 // src/lib/db.js
 // 役割: PostgreSQLデータベースへの接続プールを管理する
-// 修正: トランザクション管理用の関数を追加 (getClient, beginTransaction, etc.)
+// 修正: 環境変数の読み込みを柔軟にし、接続エラー時のログを改善
 
 import { Pool } from 'pg';
 
@@ -61,34 +61,6 @@ export async function query(text, params) {
     });
     throw error;
   }
-}
-
-// --- トランザクション管理用ヘルパー関数 ---
-
-// クライアントを取得（トランザクション開始時に使用）
-export async function getClient() {
-  const client = await pool.connect();
-  return client;
-}
-
-// トランザクション開始
-export async function beginTransaction(client) {
-  await client.query('BEGIN');
-}
-
-// トランザクションコミット
-export async function commitTransaction(client) {
-  await client.query('COMMIT');
-}
-
-// トランザクションロールバック
-export async function rollbackTransaction(client) {
-  await client.query('ROLLBACK');
-}
-
-// クライアント解放
-export function releaseClient(client) {
-  client.release();
 }
 
 export default pool;

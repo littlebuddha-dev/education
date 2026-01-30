@@ -1,313 +1,216 @@
-// /src/app/children/[id]/page.js
-// 役割: 子どもの詳細ページ。AuthContextを使用するように修正。
-// 🔧 修正: 子どもユーザーの学習状況アクセスを改善
-
+//src/app/children/[id]/page.js
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { useAuth } from '@/context/AuthContext'; // ✅ AuthContextを使用
-import { apiClient } from '@/utils/apiClient'; // ✅ apiClientを使用
+import { useState, useEffect, use } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/context/AuthContext';
 import SkillLogForm from '@/components/SkillLogForm';
 
-export default function ChildDetailPage() {
-  const params = useParams();
-  const childId = params ? params.id : undefined;
+export default function ChildDetailPage({ params }) {
+  // ✅ Next.js 15+ 対応: params は Promise なので use() で展開する
+  const resolvedParams = use(params);
+  const childId = resolvedParams.id;
+
+  const { user, token, loading: authLoading } = useAuth();
   const router = useRouter();
-  const { user, isAuthenticated, isLoading: authLoading } = useAuth(); // ✅ AuthContextを使用
-
+  
   const [child, setChild] = useState(null);
-  const [skillLogs, setSkillLogs] = useState([]);
-  const [learningProgress, setLearningProgress] = useState([]);
-  const [error, setError] = useState('');
-  const [isReady, setIsReady] = useState(false);
-  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  console.log('[ChildDetailPage] Render:', { 
-    childId, 
-    authLoading, 
-    isAuthenticated, 
-    userRole: user?.role,
-    userId: user?.id 
-  });
-
-  // 認証とパラメータの準備を確認
   useEffect(() => {
-    console.log('[ChildDetailPage] Auth check effect:', { authLoading, isAuthenticated, childId, user: user?.email });
-    
-    if (authLoading) {
-      console.log('[ChildDetailPage] Still loading auth...');
+    // 1. 認証ロード中は処理しない
+    if (authLoading) return;
+
+    // 2. 未認証の場合は、自動リダイレクトせず、ローディングを終了して画面表示に任せる
+    // (ここで router.push するとループの原因になるため)
+    if (!token) {
+      setLoading(false);
       return;
     }
 
-    if (!isAuthenticated || !user) {
-      console.log('[ChildDetailPage] Not authenticated, redirecting to login');
-      router.push('/login');
-      return;
-    }
+    if (!childId) return;
 
-    if (!childId) {
-      console.log('[ChildDetailPage] No childId available yet');
-      return;
-    }
-
-    console.log('[ChildDetailPage] Auth and params ready');
-    setIsReady(true);
-  }, [authLoading, isAuthenticated, user, childId, router]);
-
-  // データフェッチ
-  useEffect(() => {
-    if (!isReady || !childId || !user) {
-      console.log('[ChildDetailPage] Data fetch conditions not met:', { isReady, childId, hasUser: !!user });
-      return;
-    }
-
-    console.log('[ChildDetailPage] Starting data fetch for childId:', childId);
-    setIsDataLoading(true);
-    setError('');
-
-    const fetchAllData = async () => {
+    const fetchChildData = async () => {
       try {
-        // 子ども情報を取得
-        console.log('[ChildDetailPage] Fetching child info...');
-        const childResponse = await apiClient(`/api/children?id=${childId}`);
-        
-        if (!childResponse.ok) {
-          const errorData = await childResponse.json();
-          throw new Error(errorData.error || '子ども情報の取得に失敗しました');
-        }
+        setLoading(true);
+        setError(null);
 
-        const childData = await childResponse.json();
-        console.log('[ChildDetailPage] Child data response:', childData);
-        
-        const foundChild = childData.find(c => c.id === childId);
-        if (!foundChild) {
-          throw new Error('指定された子どもが見つかりませんでした');
-        }
-
-        // 権限チェック
-        const hasPermission = user.role === 'admin' || 
-                            foundChild.user_id === user.id || 
-                            foundChild.child_user_id === user.id;
-        
-        console.log('[ChildDetailPage] Permission check:', {
-          userRole: user.role,
-          foundChildUserId: foundChild.user_id,
-          foundChildUserIdMatch: foundChild.child_user_id,
-          currentUserId: user.id,
-          hasPermission
+        const res = await fetch('/api/children', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
         });
 
-        if (!hasPermission) {
-          throw new Error('この子どもの情報を閲覧する権限がありません');
+        if (!res.ok) {
+          if (res.status === 401) {
+             throw new Error('UNAUTHORIZED');
+          }
+          throw new Error('データの取得に失敗しました');
+        }
+
+        const children = await res.json();
+        
+        // IDで対象の子どもを検索
+        const foundChild = children.find(c => c.id === childId);
+
+        if (!foundChild) {
+           throw new Error('NOT_FOUND');
         }
 
         setChild(foundChild);
 
-        // スキルログを取得
-        console.log('[ChildDetailPage] Fetching skill logs...');
-        try {
-          const skillResponse = await apiClient(`/api/children/${childId}/skills`);
-          if (skillResponse.ok) {
-            const skillData = await skillResponse.json();
-            setSkillLogs(skillData);
-          } else {
-            console.warn('[ChildDetailPage] Skill logs fetch failed, but continuing...');
-            setSkillLogs([]);
-          }
-        } catch (skillError) {
-          console.warn('[ChildDetailPage] Skill logs error:', skillError);
-          setSkillLogs([]);
-        }
-
-        // 学習進捗を取得
-        console.log('[ChildDetailPage] Fetching learning progress...');
-        try {
-          const progressResponse = await apiClient(`/api/children/${childId}/learning-progress`);
-          if (progressResponse.ok) {
-            const progressData = await progressResponse.json();
-            setLearningProgress(progressData);
-          } else {
-            console.warn('[ChildDetailPage] Learning progress fetch failed, but continuing...');
-            setLearningProgress([]);
-          }
-        } catch (progressError) {
-          console.warn('[ChildDetailPage] Learning progress error:', progressError);
-          setLearningProgress([]);
-        }
-
       } catch (err) {
-        console.error('[ChildDetailPage] Data fetch error:', err);
+        console.error('Child detail error:', err);
         setError(err.message);
       } finally {
-        setIsDataLoading(false);
+        setLoading(false);
       }
     };
 
-    fetchAllData();
-  }, [isReady, childId, user]);
+    fetchChildData();
+  }, [childId, token, authLoading]);
 
-  const fetchSkills = async () => {
-    if (!childId) return;
-    try {
-      const response = await apiClient(`/api/children/${childId}/skills`);
-      if (response.ok) {
-        const data = await response.json();
-        setSkillLogs(data);
-      }
-    } catch (err) {
-      console.error('[ChildDetailPage] Skill refresh error:', err);
-    }
-  };
+  // ----------------------------------------------------------------
+  // 画面描画ロジック
+  // ----------------------------------------------------------------
 
-  // ローディング状態
-  if (authLoading || !isReady || isDataLoading) {
+  // 1. 認証情報ロード中
+  if (authLoading) {
     return (
-      <main style={{ padding: '2rem' }}>
-        <h1>学習履歴</h1>
-        <p>読み込み中...</p>
-        {process.env.NODE_ENV === 'development' && (
-          <div style={{ marginTop: '1rem', fontSize: '0.9em', color: '#666' }}>
-            Debug: authLoading={String(authLoading)}, isReady={String(isReady)}, isDataLoading={String(isDataLoading)}, childId={childId}
-          </div>
-        )}
-      </main>
+      <div className="flex flex-col justify-center items-center min-h-screen bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
+        <p className="text-gray-500">認証情報を確認中...</p>
+      </div>
     );
   }
 
-  // エラー状態
-  if (error) {
+  // 2. 未認証状態 (トークンなし) - 自動リダイレクトの代わりにボタンを表示
+  if (!token) {
     return (
-      <main style={{ padding: '2rem' }}>
-        <h1>学習履歴</h1>
-        <div style={{ color: 'red', padding: '1rem', border: '1px solid red', borderRadius: '4px', backgroundColor: '#ffebee' }}>
-          ⚠️ {error}
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gray-50">
+        <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-md w-full border border-gray-200">
+          <p className="text-lg text-gray-800 mb-6 font-bold">ログインが必要です</p>
+          <p className="text-gray-600 mb-6 text-sm">
+            このページを閲覧するにはログインしてください。
+          </p>
+          <button 
+            onClick={() => router.push(`/login?redirectTo=/children/${childId}`)}
+            className="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 transition-colors w-full font-medium"
+          >
+            ログインページへ移動
+          </button>
         </div>
-        <button 
-          onClick={() => router.back()} 
-          style={{ marginTop: '1rem', padding: '0.5rem 1rem', border: '1px solid #ccc', borderRadius: '4px', cursor: 'pointer' }}
-        >
-          戻る
-        </button>
-      </main>
+      </div>
     );
   }
 
-  // 子ども情報がない場合
-  if (!child) {
+  // 3. データロード中 (認証済みだがデータ取得中)
+  if (loading) {
     return (
-      <main style={{ padding: '2rem' }}>
-        <h1>学習履歴</h1>
-        <p>子ども情報が見つかりませんでした。</p>
-        <button onClick={() => router.back()} style={{ marginTop: '1rem' }}>戻る</button>
-      </main>
+      <div className="flex flex-col justify-center items-center min-h-screen bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-500 mb-4"></div>
+        <p className="text-gray-500">データを読み込んでいます...</p>
+      </div>
     );
   }
+
+  // 4. エラー表示
+  if (error) {
+    let errorTitle = 'エラーが発生しました';
+    let errorMessage = error;
+    let actionButton = (
+      <button 
+        onClick={() => router.push('/children')}
+        className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+      >
+        子ども一覧に戻る
+      </button>
+    );
+
+    if (error === 'UNAUTHORIZED') {
+        errorTitle = 'セッション切れ';
+        errorMessage = '再度ログインしてください。';
+        actionButton = (
+            <button 
+              onClick={() => router.push(`/login?redirectTo=/children/${childId}`)}
+              className="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+            >
+              ログインページへ
+            </button>
+        );
+    } else if (error === 'NOT_FOUND') {
+        errorMessage = 'この子どもの情報を閲覧する権限がありません、または存在しません。';
+    }
+
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gray-50">
+        <div className="bg-red-50 text-red-700 p-6 rounded-lg border border-red-200 mb-6 shadow-sm max-w-md w-full text-center">
+          <p className="font-bold text-lg mb-2">{errorTitle}</p>
+          <p>{errorMessage}</p>
+        </div>
+        {actionButton}
+      </div>
+    );
+  }
+
+  if (!child) return null;
 
   return (
-    <main style={{ padding: '2rem' }}>
-      <h1>{child.name} さんの学習履歴</h1>
-      
-      <div style={{ marginBottom: '2rem', padding: '1rem', backgroundColor: '#f5f5f5', borderRadius: '8px' }}>
-        <p><strong>誕生日:</strong> {child.birthday ? new Date(child.birthday).toLocaleDateString() : '未設定'}</p>
-        <p><strong>性別:</strong> {child.gender || '未設定'}</p>
-        <p><strong>登録日:</strong> {new Date(child.created_at).toLocaleDateString()}</p>
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        {/* ヘッダー部分 */}
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between border border-gray-100">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+              <span className="text-4xl bg-gray-100 p-2 rounded-full">{child.gender === '男の子' ? '👦' : '👧'}</span>
+              <span>{child.displayName}</span>
+            </h1>
+            <p className="mt-2 text-sm text-gray-500 ml-1">
+              誕生日: {new Date(child.birthday).toLocaleDateString()} 
+              <span className="ml-2 font-medium text-indigo-600">({getAge(child.birthday)})</span>
+            </p>
+          </div>
+          <button
+            onClick={() => router.push('/children')}
+            className="mt-4 sm:mt-0 px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+          >
+            ← 一覧に戻る
+          </button>
+        </div>
+
+        {/* スキル登録フォーム */}
+        <SkillLogForm childId={child.id} onSuccess={() => {
+            console.log('Log added!');
+            // ここでデータの再取得などを行うことができます
+        }} />
+
+        {/* ここにグラフや履歴などのコンポーネントを追加可能 */}
+        <div className="bg-white shadow rounded-lg p-6 mt-6 border border-gray-100">
+          <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+            <span className="mr-2">📊</span> 学習履歴・分析
+          </h2>
+          <div className="bg-gray-50 rounded-lg p-8 text-center border border-dashed border-gray-300">
+            <p className="text-gray-500">
+              まだ記録がありません。上のフォームから日々の成長を記録してみましょう！
+            </p>
+          </div>
+        </div>
+
       </div>
-
-      <h2 style={{ marginTop: '2rem', borderBottom: '2px solid #0070f3', paddingBottom: '0.5rem' }}>スキルログ</h2>
-      {skillLogs.length === 0 ? (
-        <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: '#f9f9f9', borderRadius: '8px', margin: '1rem 0' }}>
-          <p style={{ color: '#666' }}>スキルログがまだ登録されていません。</p>
-          <p style={{ fontSize: '0.9em', color: '#888' }}>先生とのチャットで学習を進めると、自動的にスキルが記録されます。</p>
-        </div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f0f0f0' }}>
-                <th style={{ border: '1px solid #ddd', padding: '12px', textAlign: 'left' }}>分野</th>
-                <th style={{ border: '1px solid #ddd', padding: '12px', textAlign: 'center' }}>スコア</th>
-                <th style={{ border: '1px solid #ddd', padding: '12px', textAlign: 'left' }}>記録日時</th>
-              </tr>
-            </thead>
-            <tbody>
-              {skillLogs.map((log) => (
-                <tr key={log.id} style={{ ':hover': { backgroundColor: '#f9f9f9' } }}>
-                  <td style={{ border: '1px solid #ddd', padding: '12px' }}>{log.domain}</td>
-                  <td style={{ border: '1px solid #ddd', padding: '12px', textAlign: 'center', fontWeight: 'bold' }}>{log.score}</td>
-                  <td style={{ border: '1px solid #ddd', padding: '12px' }}>{new Date(log.recorded_at).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <h2 style={{ marginTop: '3rem', borderBottom: '2px solid #0070f3', paddingBottom: '0.5rem' }}>学習進捗</h2>
-      {learningProgress.length === 0 ? (
-        <div style={{ padding: '2rem', textAlign: 'center', backgroundColor: '#f9f9f9', borderRadius: '8px', margin: '1rem 0' }}>
-          <p style={{ color: '#666' }}>学習目標がまだ設定されていないか、進捗データがありません。</p>
-        </div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-            <thead>
-              <tr style={{ backgroundColor: '#f0f0f0' }}>
-                <th style={{ border: '1px solid #ddd', padding: '12px', textAlign: 'left' }}>目標名</th>
-                <th style={{ border: '1px solid #ddd', padding: '12px', textAlign: 'left' }}>教科</th>
-                <th style={{ border: '1px solid #ddd', padding: '12px', textAlign: 'left' }}>分野</th>
-                <th style={{ border: '1px solid #ddd', padding: '12px', textAlign: 'center' }}>ステータス</th>
-                <th style={{ border: '1px solid #ddd', padding: '12px', textAlign: 'left' }}>達成日</th>
-              </tr>
-            </thead>
-            <tbody>
-              {learningProgress.map((lp) => (
-                <tr key={lp.id}>
-                  <td style={{ border: '1px solid #ddd', padding: '12px' }}>{lp.goal_name}</td>
-                  <td style={{ border: '1px solid #ddd', padding: '12px' }}>{lp.subject}</td>
-                  <td style={{ border: '1px solid #ddd', padding: '12px' }}>{lp.domain}</td>
-                  <td style={{ 
-                    border: '1px solid #ddd', 
-                    padding: '12px', 
-                    textAlign: 'center',
-                    color: lp.status === '達成済み' ? '#28a745' : '#6c757d',
-                    fontWeight: 'bold'
-                  }}>
-                    {lp.status}
-                  </td>
-                  <td style={{ border: '1px solid #ddd', padding: '12px' }}>
-                    {lp.achieved_at ? new Date(lp.achieved_at).toLocaleDateString() : '未達成'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* スキルログ登録フォーム - 保護者または子ども本人のみ表示 */}
-      {user && child && (user.role === 'parent' || (user.role === 'child' && child.child_user_id === user.id)) && (
-        <div style={{ marginTop: '3rem', padding: '2rem', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-          <SkillLogForm childId={childId} onSuccess={fetchSkills} />
-        </div>
-      )}
-
-      <div style={{ marginTop: '2rem', textAlign: 'center' }}>
-        <button 
-          onClick={() => router.back()} 
-          style={{ 
-            padding: '0.75rem 2rem', 
-            backgroundColor: '#6c757d', 
-            color: 'white', 
-            border: 'none', 
-            borderRadius: '4px', 
-            cursor: 'pointer',
-            fontSize: '1rem'
-          }}
-        >
-          戻る
-        </button>
-      </div>
-    </main>
+    </div>
   );
+}
+
+// 年齢計算ヘルパー
+function getAge(birthdayStr) {
+  const birthDate = new Date(birthdayStr);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const m = today.getMonth() - birthDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return `${age}歳`;
 }

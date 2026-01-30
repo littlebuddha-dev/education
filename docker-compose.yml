@@ -1,0 +1,50 @@
+services:
+  # Next.js アプリケーション
+  app:
+    build: .
+    container_name: education-app
+    ports:
+      - "3000:3000"
+    # Node.jsアプリには .env を読み込ませる
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+      # コンテナ間通信の設定（内部では標準の5432を使います）
+      - DB_HOST=db
+      - DB_PORT=5432
+      # ✅ トラブル回避のため、DB設定を直接記述して固定します
+      - DB_USER=user
+      - DB_PASSWORD=password
+      - DB_NAME=userdb
+      # その他の設定は .env またはデフォルト値を使用
+      - JWT_SECRET=${JWT_SECRET:-default_secret_please_change}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-default_refresh_secret_please_change}
+      - WATCHPACK_POLLING=true
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - db
+
+  # PostgreSQL データベース
+  db:
+    image: postgres:15-alpine
+    container_name: education-db
+    ports:
+      # ✅ ポート競合を避けるため、ホスト側の 5433 を使用します
+      # (ホスト:5433 -> コンテナ:5432)
+      - "127.0.0.1:5433:5432"
+    environment:
+      # ✅ 変数展開を使わず、設定を直接記述して確実に反映させます
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: userdb
+    volumes:
+      # ✅ ボリューム名を変更して、強制的に新規DBとして初期化させる
+      - education_pg_data_v2:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/1_schema.sql
+      - ./seed.sql:/docker-entrypoint-initdb.d/2_seed.sql
+
+volumes:
+  education_pg_data_v2: # 新しいボリューム名
