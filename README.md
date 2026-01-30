@@ -25,10 +25,10 @@ npm install
 
 ### **Step 2\. 環境変数の設定**
 
-設定ファイルを作成します。.env.local ではなく、Docker連携のために **.env** を使用するのがポイントです。
+設定ファイルを作成します。.env.sample ではなく、Docker連携のために **.env** を使用するのがポイントです。
 
 \# サンプルをコピーして .env を作成  
-cp env.local.sample .env
+cp env.sample .env
 
 作成された .env ファイルを開き、以下の内容になっているか確認してください。
 
