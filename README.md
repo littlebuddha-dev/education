@@ -1,139 +1,185 @@
-# **Education AI System \- 開発環境セットアップガイド**
+# **教育AIシステム (Education AI System)**
 
-このプロジェクトは、子どもの成長と学習を支援する教育AIシステムのプロトタイプです。
+AIを活用して子供たちの学習をサポートし、保護者が成長を見守るための教育プラットフォームです。Next.js (App Router) と PostgreSQL を使用して構築されています。
 
-**Next.js (App Router)** と **PostgreSQL** を使用しています。
-
-初見の方でも以下の手順通りに進めれば、約5〜10分で開発環境を立ち上げることができます。
-
-## **✅ 前提条件 (Prerequisites)**
+## **🚀 前提条件**
 
 開発を始める前に、以下のツールがインストールされていることを確認してください。
 
-* **Node.js**: v18系 または v20系 (LTS推奨)  
-* **Docker Desktop**: データベースを起動するために必須です。
+* **Node.js**: v18.17.0 以上 (v20推奨)  
+* **npm**: Node.jsに同梱  
+* **Docker & Docker Compose**: データベースを実行するために必要
 
-## **🚀 クイックスタート (Quick Start)**
+## **🛠️ 環境構築手順**
 
-ターミナルを開き、プロジェクトのルートディレクトリで以下のコマンドを順番に実行してください。
+### **1\. リポジトリのクローンと依存関係のインストール**
 
-### **Step 1\. 依存パッケージのインストール**
-
-まずはプロジェクトに必要なライブラリをインストールします。
-
+\# 依存パッケージのインストール  
 npm install
 
-### **Step 2\. 環境変数の設定**
+### **2\. 環境変数の設定**
 
-設定ファイルを作成します。.env.sample ではなく、Docker連携のために **.env** を使用するのがポイントです。
+プロジェクトルートにある env.sample をコピーして、.env.local ファイルを作成します。
 
-\# サンプルをコピーして .env を作成  
-cp env.sample .env
+cp env.sample .env.local
 
-作成された .env ファイルを開き、以下の内容になっているか確認してください。
+.env.local を開き、必要に応じて設定を変更してください。
 
-**特にポート番号が 5433 になっている点に注意してください（Mac標準のPostgreSQLとの競合回避のため）。**
+特に **OpenAI APIキー** (OPENAI\_API\_KEY) は、AI機能を使用するために必要です。
 
-\# \--- .env ファイルの内容 \---
+\# .env.local の例  
+POSTGRES\_USER=user  
+POSTGRES\_PASSWORD=password  
+POSTGRES\_DB=userdb  
+PGHOST=localhost  
+PGPORT=5433  \# Dockerの設定に合わせる（デフォルト: 5433）  
+OPENAI\_API\_KEY=sk-your-api-key-here
 
-\# データベース設定 (Docker Compose & セットアップスクリプト用)  
-DB\_USER=user  
-DB\_PASSWORD=password  
-DB\_NAME=userdb  
-DB\_HOST=127.0.0.1  
-DB\_PORT=5433
+### **3\. データベースの起動**
 
-\# Next.js アプリケーション用 (pgライブラリの標準変数)  
-PGHOST=127.0.0.1  
-PGPORT=5433  
-PGUSER=user  
-PGPASSWORD=password  
-PGDATABASE=userdb
+Docker Composeを使用してPostgreSQLデータベースを起動します。
 
-\# 認証設定 (開発用ダミーキー)  
-JWT\_SECRET=dev-secret-key-12345  
-JWT\_REFRESH\_SECRET=dev-refresh-secret-67890
-
-### **Step 3\. データベースの起動**
-
-Dockerを使ってPostgreSQLデータベースを起動します。
+ポート競合を避けるため、ホスト側の **5433番ポート** を使用する設定になっています。
 
 \# データベースコンテナをバックグラウンドで起動  
 docker compose up \-d db
 
-実行後、docker ps コマンドで education-db という名前のコンテナが動いていることを確認できます。
+\# 起動確認 (Statusが Up になっていること)  
+docker compose ps
 
-### **Step 4\. データベースの初期化**
+### **4\. データベースの初期化 (セットアップ)**
 
 テーブルの作成と初期データ（シードデータ）の投入を行います。
 
-専用のスクリプトが用意されており、複雑な手順を自動化しています。
+コンテナが完全に起動するまで数秒待ってから実行してください。
 
 npm run db:setup
 
-成功すると、以下のようなメッセージが表示されます。
+成功すると、以下のメッセージが表示されます。
 
-✨ セットアップ完了！
+✅ Schema applied successfully.
 
-### **Step 5\. アプリケーションの起動**
+✅ Seed data inserted successfully.
 
-開発サーバーを立ち上げます。
+🎉 Database setup completed\!
+
+### **5\. 開発サーバーの起動**
 
 npm run dev
 
 ブラウザで [http://localhost:3000](https://www.google.com/search?q=http://localhost:3000) にアクセスしてください。
 
-## **🔑 ログイン情報 (Test Accounts)**
+## **🔑 ログイン情報 (初期データ)**
 
-初期化(db:setup)直後に使えるテスト用アカウントです。
+セットアップ時に以下のテスト用アカウントが作成されます。
 
-| ロール | メールアドレス | パスワード | 備考 |
-| :---- | :---- | :---- | :---- |
-| **管理者** | admin@example.com | adminpassword | 全データ閲覧可 |
-| **保護者** | apple.darwin@gmail.com | password123 | セットアップ済みデータ |
-| **保護者** | parent1@example.com | parentpassword | 田中太郎 |
-| **子ども** | child1@example.com | childpassword | 田中一郎 |
+### **管理者 (Admin)**
 
-## **🛠 トラブルシューティング**
+全データの閲覧・管理が可能です。
 
-うまく動かない場合は、以下を確認してください。
+* **Email**: admin@example.com  
+* **Password**: adminpassword
 
-### **Q. bind: address already in use エラーが出る**
+### **保護者 (Parent)**
 
-**原因:** ポート5432または5433が既に使用されています。
+子供の学習記録の管理やチャット相手の選択が可能です。
 
-**対策:** Macで他のPostgreSQLが動いている可能性があります。docker-compose.yml と .env のポート番号を 5434 などに変更して再試行してください。
+* **Email**: parent1@example.com  
+* **Password**: parentpassword
 
-### **Q. role "user" does not exist エラーが出る**
+### **子供 (Child)**
 
-**原因:** データベースが古い設定のまま残っています。
+AIとのチャットや学習が可能です。
 
-**対策:** データベースを一度完全に削除して作り直します。
+* **Email**: child1@example.com  
+* **Password**: childpassword
 
-\# コンテナとデータを完全削除  
-docker compose down \-v
+## **🆘 トラブルシューティング**
 
-\# 再起動  
-docker compose up \-d db
+### **ログインできない / パスワードが通らない場合**
 
-\# 少し待ってから初期化  
-sleep 5  
-npm run db:setup
+環境によってハッシュ化の結果が異なる場合があるため、以下の手順で管理者パスワードを再設定してください。
 
-### **Q. ページが白紙になる、またはリロードを繰り返す**
+1. プロジェクトルートに reset-admin.js というファイルを作成し、以下のコードを記述します。
 
-**原因:** ブラウザに残っている古いCookieが悪さをしている可能性があります。
+// reset-admin.js  
+import { Pool } from 'pg';  
+import bcrypt from 'bcrypt';  
+import dotenv from 'dotenv';
 
-**対策:** ブラウザのCookieを削除するか、シークレットウィンドウで試してください。
+dotenv.config({ path: '.env.local' });  
+dotenv.config({ path: '.env' });
 
-## **📁 主要なディレクトリ構造**
+const pool \= new Pool({  
+  host: process.env.PGHOST,  
+  port: process.env.PGPORT,  
+  user: process.env.PGUSER,  
+  password: process.env.PGPASSWORD,  
+  database: process.env.PGDATABASE,  
+});
 
-* src/app: Next.js App Routerのページコンポーネント  
-* src/lib: DB接続(db.js)や認証(auth.js)などのコアロジック  
-* src/components: 再利用可能なUIコンポーネント  
-* src/repositories: データベース操作をまとめた層  
-* scripts: DBセットアップ用スクリプト  
-* schema.sql: テーブル定義  
-* seed.sql: 初期データ定義
+async function resetAdmin() {  
+  try {  
+    const email \= 'admin@example.com';  
+    const password \= 'adminpassword';  
+    const hash \= await bcrypt.hash(password, 10);  
+      
+    const res \= await pool.query(  
+      \`UPDATE users SET password\_hash \= $1 WHERE email \= $2 RETURNING id\`,  
+      \[hash, email\]  
+    );
 
-Enjoy coding\! 🚀
+    if (res.rowCount \> 0\) {  
+      console.log(\`✅ Password for ${email} has been updated successfully.\`);  
+    } else {  
+      console.error(\`❌ User ${email} not found.\`);  
+    }  
+  } catch (err) {  
+    console.error(err);  
+  } finally {  
+    pool.end();  
+  }  
+}
+
+resetAdmin();
+
+2. スクリプトを実行してパスワードを更新します。
+
+node reset-admin.js
+
+### **データベースを完全にリセットしたい場合**
+
+セットアップに失敗したり、データを初期状態に戻したい場合は以下の手順を実行してください。
+
+**注意: すべてのデータが削除されます。**
+
+1. コンテナとボリュームを削除します。  
+   docker compose down \-v
+
+2. コンテナを再起動します。  
+   docker compose up \-d db
+
+3. 初期化スクリプトを再実行します。  
+   npm run db:setup
+
+### **スキル統計ページなどでエラーが出る場合**
+
+Next.js 15 以降、APIルートの params は非同期（Promise）になりました。
+
+もし params.id などのアクセスでエラーが出る場合は、必ず await してください。
+
+// 修正例  
+export async function GET(req, { params }) {  
+  const { id } \= await params; // awaitが必要  
+  // ...  
+}
+
+## **📂 ディレクトリ構成**
+
+* src/app: Next.js App Router ページコンポーネント  
+* src/components: 再利用可能なReactコンポーネント  
+* src/lib: ユーティリティ、認証ロジック、DB接続設定など  
+* src/repositories: データベースアクセスのロジック（SQLクエリなど）  
+* scripts: データベースセットアップ用スクリプト  
+* schema.sql: データベースのテーブル定義  
+* seed.sql: 初期投入用データ

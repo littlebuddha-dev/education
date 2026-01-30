@@ -1,11 +1,11 @@
 // /src/context/AuthContext.js
 // 役割: アプリ全体の認証状態を一元管理する。
-// 🔧 修正: ログインループを解消するため、認証状態の管理を改善
 
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { apiClient, setAccessToken, getAccessToken } from '@/utils/apiClient';
+// 名前付きインポートを使用
+import { apiClient, setAccessToken } from '@/utils/apiClient';
 import { useRouter } from 'next/navigation';
 
 const AuthContext = createContext(null);
@@ -14,17 +14,24 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [hasInitialized, setHasInitialized] = useState(false); // 🔧 追加: 初期化完了フラグ
+  const [hasInitialized, setHasInitialized] = useState(false);
   const router = useRouter();
 
   const handleLogout = useCallback(() => {
     console.log('[AuthContext] Logging out...');
-    setAccessToken(null);
+    // setAccessTokenが関数として存在するか確認してから実行
+    if (typeof setAccessToken === 'function') {
+      setAccessToken(null);
+    }
     setUser(null);
     setIsAuthenticated(false);
-    apiClient('/api/users/logout', { method: 'POST' }).finally(() => {
-      window.location.href = '/login';
-    });
+    
+    // ログアウトAPIを呼び出すが、失敗しても強制的にログイン画面へ
+    apiClient('/api/users/logout', { method: 'POST' })
+      .catch(err => console.error('Logout API failed:', err))
+      .finally(() => {
+        window.location.href = '/login';
+      });
   }, []);
 
   const checkAuthStatus = useCallback(async () => {
@@ -38,24 +45,31 @@ export function AuthProvider({ children }) {
       
       if (response.ok) {
         const data = await response.json();
-        console.log('[AuthContext] Auth check successful:', { user: data.user?.email, role: data.user?.role });
-        setAccessToken(data.accessToken);
+        console.log('[AuthContext] Auth check successful');
+        
+        // ここでエラーが出ないようチェック
+        if (typeof setAccessToken === 'function') {
+          setAccessToken(data.accessToken);
+        } else {
+          console.error('[AuthContext] setAccessToken is not a function');
+        }
+
         setUser(data.user);
         setIsAuthenticated(true);
       } else {
-        console.log('[AuthContext] Auth check failed:', response.status);
+        console.log('[AuthContext] Auth check failed or no session');
         setIsAuthenticated(false);
         setUser(null);
-        setAccessToken(null);
+        if (typeof setAccessToken === 'function') setAccessToken(null);
       }
     } catch (err) {
       console.error("[AuthContext] Auth check error:", err);
       setIsAuthenticated(false);
       setUser(null);
-      setAccessToken(null);
     } finally {
+      // どんなエラーが起きても必ず初期化完了とする
       setIsLoading(false);
-      setHasInitialized(true); // 🔧 追加: 初期化完了
+      setHasInitialized(true);
     }
   }, []);
 
@@ -64,9 +78,13 @@ export function AuthProvider({ children }) {
 
     const tokenRefreshedListener = (event) => {
       console.log('[AuthContext] Token refreshed event received');
-      if(event.detail.accessToken) setAccessToken(event.detail.accessToken);
-      if(event.detail.user) setUser(event.detail.user);
-      setIsAuthenticated(true);
+      if (event.detail?.accessToken && typeof setAccessToken === 'function') {
+        setAccessToken(event.detail.accessToken);
+      }
+      if (event.detail?.user) {
+        setUser(event.detail.user);
+        setIsAuthenticated(true);
+      }
     };
     
     const logoutListener = () => {
@@ -83,9 +101,11 @@ export function AuthProvider({ children }) {
     };
   }, [handleLogout, checkAuthStatus]);
 
+  // login関数もシンプルに
   const login = useCallback(async (accessToken, userData) => {
-    console.log('[AuthContext] Login called:', { user: userData?.email, role: userData?.role });
-    setAccessToken(accessToken);
+    if (typeof setAccessToken === 'function') {
+      setAccessToken(accessToken);
+    }
     setUser(userData);
     setIsAuthenticated(true);
   }, []);
@@ -94,10 +114,10 @@ export function AuthProvider({ children }) {
     user,
     isAuthenticated,
     isLoading,
-    hasInitialized, // 🔧 追加: 外部から初期化状態を確認可能
+    hasInitialized,
     login,
     logout: handleLogout,
-    checkAuthStatus // 🔧 追加: 手動で認証状態をリフレッシュ可能
+    checkAuthStatus
   };
 
   return (

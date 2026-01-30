@@ -1,66 +1,69 @@
-// src/lib/db.js
-// 役割: PostgreSQLデータベースへの接続プールを管理する
-// 修正: 環境変数の読み込みを柔軟にし、接続エラー時のログを改善
+// scripts/setup-db.js
+// 目的: データベースのスキーマ作成と初期データ（シード）の投入
 
 import { Pool } from 'pg';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import fs from 'fs/promises';
 
-// 環境変数が設定されているかチェック
-// Next.jsでは .env.local などを自動で読み込むが、
-// 明示的にチェックすることで設定漏れを防ぐ
+// ES Modulesで __dirname を取得
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// .env.local または .env から環境変数を読み込む
+dotenv.config({ path: path.resolve(__dirname, '../.env.local') });
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+
 const requiredEnvVars = ['PGHOST', 'PGPORT', 'PGUSER', 'PGPASSWORD', 'PGDATABASE'];
 const missingVars = requiredEnvVars.filter(key => !process.env[key]);
 
-// DB接続設定がない場合はログを出力して終了するのではなく、
-// 開発環境のデフォルト値（docker-composeと整合する値）へフォールバックする手もあるが、
-// ここではエラーを明確にする方針を維持する。
-// ただし、環境変数が読み込めていない可能性も考慮し、エラーメッセージを親切にする。
-
 if (missingVars.length > 0) {
-  // 開発環境で .env が読み込まれていない場合のためのチェック
   console.error('❌ Database configuration error: Missing environment variables.');
   console.error(`   Missing: ${missingVars.join(', ')}`);
-  console.error('   Please check your .env or .env.local file.');
-  
-  // 開発環境での利便性のため、一時的にハードコードされたデフォルト値を使用する（オプション）
-  // 今回はエラーを投げて .env の修正を促す
-  // throw new Error(`Missing required environment variables: ${missingVars.join(', ')}`);
+  process.exit(1);
 }
 
 const pool = new Pool({
   host: process.env.PGHOST,
-  port: process.env.PGPORT,
+  port: parseInt(process.env.PGPORT || '5432', 10),
   user: process.env.PGUSER,
   password: process.env.PGPASSWORD,
   database: process.env.PGDATABASE,
-  // 接続アイドル時間のタイムアウト設定などを追加してリソースリークを防ぐ
-  max: 10, // 最大接続数
-  idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
 });
 
-// 接続エラーのハンドリング
-pool.on('error', (err, client) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
-});
-
-export async function query(text, params) {
-  const start = Date.now();
+async function setup() {
+  let client;
   try {
-    const res = await pool.query(text, params);
-    const duration = Date.now() - start;
-    // 開発環境のみクエリログを出力（必要に応じてコメントアウト）
-    if (process.env.NODE_ENV === 'development') {
-      // console.log('executed query', { text, duration, rows: res.rowCount });
-    }
-    return res;
+    client = await pool.connect();
+    console.log('✅ Connected to database successfully.');
+
+    // 1. スキーマファイルの読み込みと実行
+    // テーブルが存在しない場合作成する、または再作成する処理が含まれていることを想定
+    const schemaPath = path.resolve(__dirname, '../schema.sql');
+    console.log(`📖 Reading schema from ${schemaPath}...`);
+    const schemaSql = await fs.readFile(schemaPath, 'utf8');
+    await client.query(schemaSql);
+    console.log('✅ Schema applied successfully.');
+
+    // 2. シードファイルの読み込みと実行
+    // 初期ユーザーデータなどを投入
+    const seedPath = path.resolve(__dirname, '../seed.sql');
+    console.log(`📖 Reading seed data from ${seedPath}...`);
+    const seedSql = await fs.readFile(seedPath, 'utf8');
+    await client.query(seedSql);
+    console.log('✅ Seed data inserted successfully.');
+
+    console.log('🎉 Database setup completed!');
+    process.exit(0);
+
   } catch (error) {
-    console.error('Database query error:', {
-      text,
-      error: error.message,
-    });
-    throw error;
+    console.error('❌ Database setup failed:', error);
+    process.exit(1);
+  } finally {
+    if (client) client.release();
+    await pool.end();
   }
 }
 
-export default pool;
+setup();

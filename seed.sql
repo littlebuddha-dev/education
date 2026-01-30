@@ -1,5 +1,6 @@
--- /seed.sql (新設計版)
--- 役割: 教育AIシステムのサンプルデータ投入（新しいchildren設計対応）
+-- /seed.sql (修正版)
+-- 役割: 教育AIシステムのサンプルデータ投入
+-- 修正: DOブロックの構文エラー($ -> $$)を修正
 
 -- ========================================
 -- 1. 管理者ユーザー
@@ -32,7 +33,7 @@ INSERT INTO users (email, password_hash, first_name, last_name, role, birthday) 
 ON CONFLICT (email) DO NOTHING;
 
 -- ========================================
--- 4. 子どもプロフィール（新設計）
+-- 4. 子どもプロフィール
 -- ========================================
 INSERT INTO children (user_id, display_name, birthday, gender, grade, school, notes)
 SELECT 
@@ -63,7 +64,7 @@ WHERE u.role = 'child'
 ON CONFLICT (user_id) DO NOTHING;
 
 -- ========================================
--- 5. 保護者-子ども関係（新設計）
+-- 5. 保護者-子ども関係
 -- ========================================
 INSERT INTO parent_child_relationships (parent_user_id, child_user_id, relationship_type, status, created_by, approved_at, approved_by)
 SELECT 
@@ -132,7 +133,6 @@ ON CONFLICT (name) DO NOTHING;
 -- ========================================
 -- 7. 子ども学習進捗サンプルデータ
 -- ========================================
--- 田中一郎の学習進捗
 INSERT INTO child_learning_progress (child_id, goal_id, status, progress_percentage, last_accessed_at, achieved_at)
 SELECT 
     c.id,
@@ -168,7 +168,7 @@ INSERT INTO skill_logs (child_id, domain, score, context, recorded_at)
 SELECT 
     c.id,
     domains.domain,
-    (RANDOM() * 50 + 50)::INTEGER, -- 50-100点のランダムスコア
+    (RANDOM() * 50 + 50)::INTEGER,
     'サンプル学習セッション',
     CURRENT_TIMESTAMP - (RANDOM() * INTERVAL '30 days')
 FROM children c
@@ -244,7 +244,7 @@ SELECT
     score_data.subject,
     score_data.domain,
     score_data.level,
-    (RANDOM() * 20 + 1)::INTEGER, -- 1-20点のスコア
+    (RANDOM() * 20 + 1)::INTEGER,
     CURRENT_TIMESTAMP - (RANDOM() * INTERVAL '30 days'),
     CURRENT_TIMESTAMP
 FROM users u
@@ -267,7 +267,7 @@ ON CONFLICT (user_id, subject, domain) DO NOTHING;
 -- ========================================
 -- 12. データ整合性チェック
 -- ========================================
-DO $
+DO $$
 DECLARE
     user_count INTEGER;
     child_count INTEGER;
@@ -299,102 +299,20 @@ BEGIN
     RAISE NOTICE '子ども4: child4@example.com / childpassword (鈴木愛子)';
     RAISE NOTICE '子ども5: child5@example.com / childpassword (山田翔太 - 独立)';
     RAISE NOTICE '';
-    
-    -- 関係性の説明
-    RAISE NOTICE '=== 親子関係 ===';
-    RAISE NOTICE '田中太郎 → 田中一郎、田中美咲';
-    RAISE NOTICE '佐藤花子 → 佐藤健太';
-    RAISE NOTICE '鈴木一郎 → 鈴木愛子';
-    RAISE NOTICE '山田翔太 → 独立した子ども（保護者なし）';
-    RAISE NOTICE '';
-    
-    RAISE NOTICE '=== 便利なクエリ ===';
-    RAISE NOTICE 'SELECT * FROM children_with_parents; -- 保護者情報付き子ども一覧';
-    RAISE NOTICE 'SELECT * FROM user_details; -- ユーザー詳細情報';
-    RAISE NOTICE 'SELECT * FROM get_managed_children(''<parent_user_id>''); -- 管理している子ども取得';
-    RAISE NOTICE 'SELECT * FROM get_child_managers(''<child_user_id>''); -- 子どもの管理者取得';
-    RAISE NOTICE 'SELECT * FROM get_child_learning_stats(''<child_id>''); -- 学習統計取得';
-END $;
+END $$;
 
 -- ========================================
--- 13. パスワードハッシュの生成参考
+-- 13. パスワードハッシュの生成参考 (コメント)
 -- ========================================
 /*
 パスワードハッシュの生成方法（Node.jsでの例）:
-
 const bcrypt = require('bcrypt');
-
-// adminpassword
 const adminHash = await bcrypt.hash('adminpassword', 10);
-console.log('Admin hash:', adminHash);
-
-// parentpassword  
-const parentHash = await bcrypt.hash('parentpassword', 10);
-console.log('Parent hash:', parentHash);
-
-// childpassword
-const childHash = await bcrypt.hash('childpassword', 10);
-console.log('Child hash:', childHash);
-
-実際の本番環境では、より強力なパスワードを使用し、
-各ユーザーに個別のパスワードを設定してください。
 */
 
 -- ========================================
--- 14. 開発用便利クエリ
+-- 14. 開発用便利クエリ (コメント)
 -- ========================================
 /*
--- 全ユーザーとその関係を確認
-SELECT 
-    u.email,
-    u.role,
-    u.first_name,
-    u.last_name,
-    CASE 
-        WHEN u.role = 'child' THEN c.display_name
-        ELSE NULL
-    END as child_display_name
-FROM users u
-LEFT JOIN children c ON u.id = c.user_id
-ORDER BY u.role, u.email;
-
--- 親子関係の確認
-SELECT 
-    pu.email as parent_email,
-    pu.first_name || ' ' || pu.last_name as parent_name,
-    cu.email as child_email, 
-    c.display_name as child_name,
-    pcr.relationship_type,
-    pcr.status
-FROM parent_child_relationships pcr
-JOIN users pu ON pcr.parent_user_id = pu.id
-JOIN users cu ON pcr.child_user_id = cu.id
-JOIN children c ON cu.id = c.user_id
-ORDER BY pu.email;
-
--- 学習進捗の確認
-SELECT 
-    c.display_name,
-    lg.subject,
-    lg.domain,
-    clp.status,
-    clp.progress_percentage,
-    clp.achieved_at
-FROM child_learning_progress clp
-JOIN children c ON clp.child_id = c.id
-JOIN learning_goals lg ON clp.goal_id = lg.id
-WHERE clp.status != '未学習'
-ORDER BY c.display_name, lg.subject, lg.domain;
-
--- スキルログの統計
-SELECT 
-    c.display_name,
-    sl.domain,
-    COUNT(*) as log_count,
-    ROUND(AVG(sl.score), 1) as avg_score,
-    MAX(sl.recorded_at) as last_recorded
-FROM skill_logs sl
-JOIN children c ON sl.child_id = c.id
-GROUP BY c.display_name, sl.domain
-ORDER BY c.display_name, avg_score DESC;
+SELECT * FROM users;
 */

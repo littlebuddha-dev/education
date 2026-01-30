@@ -1,17 +1,21 @@
-//src/app/children/[id]/page.js
+// src/app/children/[id]/page.js
+// 役割: 子供詳細ページ
+// 修正: apiClient関数を正しく呼び出すように修正（.getメソッドの使用を廃止）
+
 'use client';
 
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { apiClient } from '@/utils/apiClient';
 import SkillLogForm from '@/components/SkillLogForm';
 
 export default function ChildDetailPage({ params }) {
-  // ✅ Next.js 15+ 対応: params は Promise なので use() で展開する
+  // Next.js 15+ 対応
   const resolvedParams = use(params);
   const childId = resolvedParams.id;
 
-  const { user, token, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   
   const [child, setChild] = useState(null);
@@ -22,9 +26,8 @@ export default function ChildDetailPage({ params }) {
     // 1. 認証ロード中は処理しない
     if (authLoading) return;
 
-    // 2. 未認証の場合は、自動リダイレクトせず、ローディングを終了して画面表示に任せる
-    // (ここで router.push するとループの原因になるため)
-    if (!token) {
+    // 2. 未認証の場合は画面表示に任せる
+    if (!isAuthenticated) {
       setLoading(false);
       return;
     }
@@ -36,17 +39,15 @@ export default function ChildDetailPage({ params }) {
         setLoading(true);
         setError(null);
 
-        const res = await fetch('/api/children', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        });
-
+        // 修正: apiClient.get() ではなく apiClient() を使用
+        // デフォルトはGETリクエストです
+        const res = await apiClient('/api/children');
+        
         if (!res.ok) {
-          if (res.status === 401) {
-             throw new Error('UNAUTHORIZED');
-          }
-          throw new Error('データの取得に失敗しました');
+           if (res.status === 401) {
+             throw { status: 401, message: 'UNAUTHORIZED' };
+           }
+           throw new Error('データの取得に失敗しました');
         }
 
         const children = await res.json();
@@ -62,14 +63,21 @@ export default function ChildDetailPage({ params }) {
 
       } catch (err) {
         console.error('Child detail error:', err);
-        setError(err.message);
+        
+        if (err.status === 401 || err.message === 'UNAUTHORIZED') {
+          setError('UNAUTHORIZED');
+        } else if (err.message === 'NOT_FOUND') {
+          setError('NOT_FOUND');
+        } else {
+          setError(err.message || 'データの取得に失敗しました');
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchChildData();
-  }, [childId, token, authLoading]);
+  }, [childId, isAuthenticated, authLoading]);
 
   // ----------------------------------------------------------------
   // 画面描画ロジック
@@ -85,8 +93,8 @@ export default function ChildDetailPage({ params }) {
     );
   }
 
-  // 2. 未認証状態 (トークンなし) - 自動リダイレクトの代わりにボタンを表示
-  if (!token) {
+  // 2. 未認証状態
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-gray-50">
         <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-md w-full border border-gray-200">
@@ -105,7 +113,7 @@ export default function ChildDetailPage({ params }) {
     );
   }
 
-  // 3. データロード中 (認証済みだがデータ取得中)
+  // 3. データロード中
   if (loading) {
     return (
       <div className="flex flex-col justify-center items-center min-h-screen bg-gray-50">
@@ -183,10 +191,9 @@ export default function ChildDetailPage({ params }) {
         {/* スキル登録フォーム */}
         <SkillLogForm childId={child.id} onSuccess={() => {
             console.log('Log added!');
-            // ここでデータの再取得などを行うことができます
         }} />
 
-        {/* ここにグラフや履歴などのコンポーネントを追加可能 */}
+        {/* 学習履歴・分析 */}
         <div className="bg-white shadow rounded-lg p-6 mt-6 border border-gray-100">
           <h2 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
             <span className="mr-2">📊</span> 学習履歴・分析

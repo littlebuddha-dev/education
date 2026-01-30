@@ -1,5 +1,6 @@
--- /schema.sql (新設計版)
--- 役割: 教育AIシステムの完全なデータベーススキーマ（新しいchildren設計対応）
+-- /schema.sql (修正版)
+-- 役割: 教育AIシステムの完全なデータベーススキーマ
+-- 修正: 再実行時にトリガー重複エラーが出ないようにDROP文を追加
 
 -- 古い関数定義が残っていてもエラーにならないよう、最初に削除処理を追加
 DROP FUNCTION IF EXISTS get_managed_children(uuid);
@@ -179,7 +180,7 @@ CREATE TABLE IF NOT EXISTS questions (
 );
 
 -- ========================================
--- インデックスの作成（パフォーマンス向上のため）
+-- インデックスの作成
 -- ========================================
 
 -- ユーザーテーブル
@@ -224,14 +225,14 @@ CREATE INDEX IF NOT EXISTS idx_learning_goals_subject_domain ON learning_goals(s
 CREATE INDEX IF NOT EXISTS idx_child_learning_progress_child_goal ON child_learning_progress(child_id, goal_id);
 CREATE INDEX IF NOT EXISTS idx_child_learning_progress_status ON child_learning_progress(status);
 
--- インデックスの追加
+-- 問題集テーブル
 CREATE INDEX IF NOT EXISTS idx_questions_subject_domain ON questions(subject, domain);
 CREATE INDEX IF NOT EXISTS idx_questions_age_range ON questions(target_age_min, target_age_max);
 CREATE INDEX IF NOT EXISTS idx_questions_difficulty ON questions(difficulty_level);
 
 
 -- ========================================
--- ビューの作成（便利な参照用）
+-- ビューの作成
 -- ========================================
 
 -- 保護者付き子ども一覧ビュー
@@ -281,7 +282,7 @@ SELECT
 FROM users u;
 
 -- ========================================
--- 関数の作成（便利な操作用）
+-- 関数の作成
 -- ========================================
 
 -- 保護者が管理する子どもを取得する関数
@@ -371,12 +372,23 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- トリガーの作成
+-- トリガーの作成 (修正: 既存のトリガーを削除してから作成)
+DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_children_updated_at ON children;
 CREATE TRIGGER update_children_updated_at BEFORE UPDATE ON children FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_skill_scores_updated_at ON skill_scores;
 CREATE TRIGGER update_skill_scores_updated_at BEFORE UPDATE ON skill_scores FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_learning_goals_updated_at ON learning_goals;
 CREATE TRIGGER update_learning_goals_updated_at BEFORE UPDATE ON learning_goals FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_child_learning_progress_updated_at ON child_learning_progress;
 CREATE TRIGGER update_child_learning_progress_updated_at BEFORE UPDATE ON child_learning_progress FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_questions_updated_at ON questions;
 CREATE TRIGGER update_questions_updated_at BEFORE UPDATE ON questions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ========================================
@@ -385,12 +397,4 @@ CREATE TRIGGER update_questions_updated_at BEFORE UPDATE ON questions FOR EACH R
 DO $$
 BEGIN
     RAISE NOTICE '=== 教育AIシステム データベーススキーマ作成完了 ===';
-    RAISE NOTICE '新機能:';
-    RAISE NOTICE '- 単純化されたchildren設計 (1対1関係)';
-    RAISE NOTICE '- 保護者-子ども関係管理システム';
-    RAISE NOTICE '- 関係承認フロー';
-    RAISE NOTICE '- 便利なビューと関数';
-    RAISE NOTICE '- 自動更新トリガー';
-    RAISE NOTICE '';
-    RAISE NOTICE '次のステップ: seed.sqlを実行してサンプルデータを投入してください';
 END $$;

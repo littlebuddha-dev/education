@@ -1,7 +1,9 @@
-// src/components/AuthGuard.js (修正後)
+// src/components/AuthGuard.js
+// 役割: 認証状態の監視と保護。Hydrationエラー対策済み。
+
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { isPublicPage, isAdminPage } from '@/lib/authConfig';
@@ -11,35 +13,54 @@ export default function AuthGuard({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  
+  // Hydrationエラーを防ぐためのマウント状態管理
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!hasInitialized) return; // AuthContextの初期化が終わるまで待機
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    // マウント前や初期化前は何もしない
+    if (!mounted || !hasInitialized) return;
 
     const isPublic = isPublicPage(pathname);
     const isAuthPage = ['/login', '/users/register', '/setup'].includes(pathname);
 
     if (isAuthenticated) {
-      // 認証済みでログインページなどにいる場合、適切なダッシュボードへリダイレクト
+      // 認証済みの場合の制御
       if (isAuthPage) {
         const dashboardPaths = { admin: '/admin/users', parent: '/children', child: '/chat' };
-        router.replace(dashboardPaths[user.role] || '/');
+        // userがnullでないことを確認
+        const role = user?.role || 'parent';
+        router.replace(dashboardPaths[role] || '/');
       }
-      // 管理者ページへの権限チェック
-      else if (isAdminPage(pathname) && user.role !== 'admin') {
+      else if (isAdminPage(pathname) && user?.role !== 'admin') {
         router.replace('/');
       }
     } else if (!isPublic) {
-      // 未認証で保護ページにアクセスした場合、ログインページへリダイレクト
+      // 未認証で保護ページにアクセスした場合
       const redirectTo = pathname + (searchParams.toString() ? `?${searchParams.toString()}` : '');
       router.replace(`/login?redirectTo=${encodeURIComponent(redirectTo)}`);
     }
-  }, [hasInitialized, isAuthenticated, user, pathname, router, searchParams]);
+  }, [mounted, hasInitialized, isAuthenticated, user, pathname, router, searchParams]);
   
-  // 認証チェック中は何も表示しないか、ローディング画面を表示
-  if (!hasInitialized) {
-    return <main style={{ padding: "2rem", textAlign: "center" }}>認証情報を確認しています...</main>;
+  // マウント前は何もレンダリングしない（これでサーバーとクライアントの不一致を防ぐ）
+  if (!mounted) {
+    return null;
   }
 
-  // 認証チェックが完了したら子コンポーネントを描画
+  // 認証情報の確認中はローディング表示
+  if (!hasInitialized) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-indigo-500 mr-2"></div>
+        <p className="text-gray-500">認証情報を確認しています...</p>
+      </div>
+    );
+  }
+
+  // チェック完了後、コンテンツを表示
   return <>{children}</>;
 }
