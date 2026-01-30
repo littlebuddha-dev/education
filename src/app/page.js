@@ -1,95 +1,52 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+// src/app/page.js
+// 役割: ホームページ。不正なJSXコメントと、誤った変数参照を修正。
 
-export default function Home() {
+'use client';
+
+import styles from './page.module.css';
+import { useAuth } from '@/context/AuthContext';
+import ClientOnly from '@/components/ClientOnly';
+import Link from 'next/link';
+
+export default function HomePage() {
+  const { isAuthenticated, user, isLoading } = useAuth();
+
   return (
     <div className={styles.page}>
       <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>src/app/page.js</code>.
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+        <ClientOnly>
+          {isLoading ? (
+            <div style={{ textAlign: "center", height: '150px' }}>
+              <p style={{ fontSize: '1.2em', color: '#888' }}>読み込み中...</p>
+            </div>
+          ) : (
+            <>
+              <div style={{ textAlign: 'center' }}>
+                <h1>教育AIシステムへようこそ！</h1>
+                
+                {/* 🔧 修正: localAuthState を削除し、正しい変数とプロパティ名を使用 */}
+                {isAuthenticated && user ? (
+                  <p style={{ marginTop: '1rem', color: '#555', fontSize: '1.1em' }}>
+                    {user.lastName} {user.firstName}さん、こんにちは。<br/>
+                    上部のナビゲーションから各機能をご利用ください。
+                  </p>
+                ) : (
+                  <p style={{ marginTop: '1rem', color: '#666' }}>
+                    AIと共に学ぶ、新しい教育プラットフォーム。
+                  </p>
+                )}
+              </div>
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
-        </div>
+              {!isAuthenticated && (
+                <div className={styles.ctas}>
+                  <Link href="/login" className={`${styles.primary} primary`}>ログイン</Link>
+                  <Link href="/users/register" className={`${styles.secondary} secondary`}>新規登録</Link>
+                </div>
+              )}
+            </>
+          )}
+        </ClientOnly>
       </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
